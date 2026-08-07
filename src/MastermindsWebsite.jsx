@@ -1,16 +1,14 @@
 import { ArrowUp } from 'lucide-react';
-import Header from './components/layout/Header.jsx';
 import Footer from './components/layout/Footer.jsx';
-import About from './components/sections/About.jsx';
-import Activities from './components/sections/Activities.jsx';
-import Connect from './components/sections/Connect.jsx';
-import FocusAreas from './components/sections/FocusAreas.jsx';
-import Hero from './components/sections/Hero.jsx';
+import Header from './components/layout/Header.jsx';
+import AdvisoryPanel from './components/sections/AdvisoryPanel.jsx';
+import ExecutiveCommittee from './components/sections/ExecutiveCommittee.jsx';
 import MastermindsHero from './components/sections/MastermindsHero.jsx';
+import SubCommittee from './components/sections/SubCommittee.jsx';
 import usePageSignals from './hooks/usePageSignals.js';
 import useRevealOnScroll from './hooks/useRevealOnScroll.js';
 
-export default function IESWebsite() {
+export default function MastermindsWebsite() {
   const { activeSection, isScrolled, showScrollTop, scrollProgress } =
     usePageSignals();
   useRevealOnScroll();
@@ -28,19 +26,17 @@ export default function IESWebsite() {
       />
 
       <main id="main-content">
-        <Hero />
-        <About />
-        <FocusAreas />
-        <Activities />
-        <MastermindsHero embedded />
-        <Connect />
+        <MastermindsHero />
+        <AdvisoryPanel />
+        <ExecutiveCommittee />
+        <SubCommittee />
       </main>
 
-      <Footer />
+      <Footer topHref="#masterminds-home" />
 
       <a
         className={`back-to-top ${showScrollTop ? 'is-visible' : ''}`}
-        href="#home"
+        href="#masterminds-home"
         aria-label="Back to top"
       >
         <ArrowUp size={18} aria-hidden="true" />

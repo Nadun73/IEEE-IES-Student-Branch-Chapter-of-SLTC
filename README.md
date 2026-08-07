@@ -1,20 +1,42 @@
-# IES — Hubtown-style Starter
+# IEEE IES Student Branch Chapter of SLTC
 
-This is a simple, responsive starter website inspired by the layout and structure of the example site you referenced. It is intentionally generic so you can populate it with your own content.
+A responsive multi-page website for the IEEE Industrial Electronics Society Student Branch Chapter of SLTC. The homepage introduces the chapter, while the standalone `/masterminds/` page presents its Advisory Panel, Executive Committee, and Sub-Committee.
 
-Files created:
-- [index.html](index.html)
-- [css/styles.css](css/styles.css)
-- [js/script.js](js/script.js)
+## Run locally
 
-Next steps:
-- Replace placeholder text and images with your content (from https://sltcieeecslk.web.app/ if you have rights to use it).
-- Add real assets to an `assets/` folder and update image `src` attributes.
-- Deploy to GitHub Pages, Netlify, or Firebase hosting.
+```bash
+npm install
+npm run dev
+```
 
-Logo:
-- Place the provided logo file at `images/ies-logo.png` to display it in the header. If you want me to add the file here, confirm and I'll write it into the project.
+The development server uses port `8086`.
 
-To run locally, open `index.html` in a browser.
+## Production build
 
-Important: Do not copy copyrighted text or images from other sites unless you have permission.
+```bash
+npm run build
+npm run preview
+```
+
+The generated production files are written to `dist/`.
+
+## Project structure
+
+- `src/IESWebsite.jsx` — homepage composition and global back-to-top control
+- `src/MastermindsWebsite.jsx` — standalone Masterminds page composition
+- `masterminds/index.html` — Vite HTML entry for `/masterminds/`
+- `src/components/layout/` — header and footer
+- `src/components/sections/` — homepage and Masterminds page sections
+- `src/components/ui/` — shared presentational components
+- `src/data/siteContent.js` — navigation and editable section content
+- `src/hooks/` — page scroll, active-section, and reveal behavior
+- `src/index.css` — responsive visual system and motion
+- `src/assets/` — original and web-optimized IES logo files
+- `scripts/prepare-logos.ps1` — recreates the trimmed web logo derivatives
+- `scripts/verify-production.ps1` — performs a bounded production preview and desktop/mobile browser check
+
+## Content notes
+
+Only confirmed chapter identity, broad IES subject areas, and the supplied committee roles and names are shown. Statistics, awards, named events, committee member photos, contact details, social links, and partner logos should be added after the official content is supplied.
+
+The “What’s ahead” panel in `src/components/sections/Activities.jsx` is the intended first replacement point for confirmed event data and media.
