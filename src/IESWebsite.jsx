@@ -7,6 +7,7 @@ import Connect from './components/sections/Connect.jsx';
 import FocusAreas from './components/sections/FocusAreas.jsx';
 import Hero from './components/sections/Hero.jsx';
 import MastermindsHero from './components/sections/MastermindsHero.jsx';
+import LoadingScreen from './components/ui/LoadingScreen.jsx';
 import usePageSignals from './hooks/usePageSignals.js';
 import useRevealOnScroll from './hooks/useRevealOnScroll.js';
 
@@ -16,35 +17,39 @@ export default function IESWebsite() {
   useRevealOnScroll();
 
   return (
-    <div className="site">
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
+    <>
+      <LoadingScreen />
 
-      <Header
-        activeSection={activeSection}
-        isScrolled={isScrolled}
-        scrollProgress={scrollProgress}
-      />
+      <div className="site">
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
 
-      <main id="main-content">
-        <Hero />
-        <About />
-        <FocusAreas />
-        <Activities />
-        <MastermindsHero embedded />
-        <Connect />
-      </main>
+        <Header
+          activeSection={activeSection}
+          isScrolled={isScrolled}
+          scrollProgress={scrollProgress}
+        />
 
-      <Footer />
+        <main id="main-content">
+          <Hero />
+          <About />
+          <FocusAreas />
+          <Activities />
+          <MastermindsHero embedded />
+          <Connect />
+        </main>
 
-      <a
-        className={`back-to-top ${showScrollTop ? 'is-visible' : ''}`}
-        href="#home"
-        aria-label="Back to top"
-      >
-        <ArrowUp size={18} aria-hidden="true" />
-      </a>
-    </div>
+        <Footer />
+
+        <a
+          className={`back-to-top ${showScrollTop ? 'is-visible' : ''}`}
+          href="#home"
+          aria-label="Back to top"
+        >
+          <ArrowUp size={18} aria-hidden="true" />
+        </a>
+      </div>
+    </>
   );
 }

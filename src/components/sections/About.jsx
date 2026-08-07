@@ -1,6 +1,18 @@
-import { ArrowRight, CircuitBoard } from 'lucide-react';
+import {
+  ArrowRight,
+  Award,
+  CircuitBoard,
+  Globe2,
+  Target,
+} from 'lucide-react';
 import { chapterValues } from '../../data/siteContent.js';
 import SectionLabel from '../ui/SectionLabel.jsx';
+
+const chapterValueIcons = {
+  award: Award,
+  globe: Globe2,
+  target: Target,
+};
 
 export default function About() {
   return (
@@ -51,21 +63,30 @@ export default function About() {
           </div>
 
           <div className="value-stack">
-            {chapterValues.map((value, index) => (
-              <article
-                className="value-item"
-                data-reveal
-                style={{ '--reveal-delay': `${index * 90}ms` }}
-                key={value.number}
-              >
-                <span>{value.number}</span>
-                <div>
-                  <h3>{value.title}</h3>
-                  <p>{value.text}</p>
-                </div>
-                <ArrowRight size={20} aria-hidden="true" />
-              </article>
-            ))}
+            {chapterValues.map((value, index) => {
+              const Icon = chapterValueIcons[value.icon];
+
+              return (
+                <article
+                  className="value-item"
+                  data-reveal
+                  style={{ '--reveal-delay': `${index * 90}ms` }}
+                  key={value.number}
+                >
+                  <span>{value.number}</span>
+                  <div className="value-item__content">
+                    <h3>{value.title}</h3>
+                    <p>{value.text}</p>
+                  </div>
+                  <div
+                    className={`value-item__icon value-item__icon--${value.icon}`}
+                    aria-hidden="true"
+                  >
+                    <Icon size={25} strokeWidth={1.7} />
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </div>
       </div>
