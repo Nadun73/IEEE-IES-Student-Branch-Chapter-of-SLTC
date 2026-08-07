@@ -76,18 +76,21 @@ export const focusAreas = [
 export const chapterValues = [
   {
     number: '01',
-    title: 'Think across systems',
-    text: 'See the full engineering picture—from sensing and control to computation and power.',
+    title: 'Our Mission',
+    text: 'Create a student-led space to explore industrial electronics through learning, collaboration, and practical engineering.',
+    icon: 'target',
   },
   {
     number: '02',
-    title: 'Build with purpose',
-    text: 'Turn technical curiosity into practical work shaped by the needs of modern industry.',
+    title: 'Global Network',
+    text: 'Connect with peers, mentors, and IEEE communities across a wider global engineering network.',
+    icon: 'globe',
   },
   {
     number: '03',
-    title: 'Grow together',
-    text: 'Learn alongside peers, mentors, and a wider global engineering community.',
+    title: 'Excellence',
+    text: 'Develop technical confidence and purposeful work shaped by the standards of modern industry.',
+    icon: 'award',
   },
 ];
 

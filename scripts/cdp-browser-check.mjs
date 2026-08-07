@@ -20,9 +20,9 @@ let commandId = 0;
 let socket;
 
 const hardTimeout = setTimeout(() => {
-  console.error('CDP browser verification exceeded 18 seconds.');
+  console.error('CDP browser verification exceeded 35 seconds.');
   process.exit(2);
-}, 18_000);
+}, 35_000);
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -132,6 +132,23 @@ function evaluate(expression) {
     }
     return response.result.value;
   });
+}
+
+async function waitForSiteReady(timeoutMilliseconds = 5_000) {
+  const deadline = Date.now() + timeoutMilliseconds;
+
+  while (Date.now() < deadline) {
+    const isReady = await evaluate(`(() => {
+      const site = document.querySelector('.site');
+      const loader = document.querySelector('.site-loader');
+      return Boolean(site) && !loader && !document.body.classList.contains('is-loading');
+    })()`);
+
+    if (isReady) return;
+    await sleep(50);
+  }
+
+  throw new Error('Timed out waiting for the site loading screen to finish.');
 }
 
 async function captureScreenshot(filename) {
@@ -357,7 +374,10 @@ async function inspectViewport({
     url: `${url}?viewport=${width}`,
   });
   await loaded;
-  await sleep(450);
+  await sleep(320);
+  await captureScreenshot(`loader-${filename}`);
+  await waitForSiteReady();
+  await sleep(120);
 
   const state = await evaluate(`(() => {
     const root = document.documentElement;
@@ -504,6 +524,9 @@ try {
   const homepageRequiredText = [
     'Ideas for intelligent industry.',
     'Built for curious',
+    'Our Mission',
+    'Global Network',
+    'Excellence',
     'What we explore',
     'Learn it. Build it.',
     'Meet the Masterminds.',
@@ -546,6 +569,12 @@ try {
     url: siteUrl,
     requiredText: homepageRequiredText,
   });
+  await captureElementScreenshot(
+    '.hero-visual',
+    'hero-visual-desktop-cdp.png',
+  );
+  await captureElementScreenshot('.about-layout', 'about-desktop-cdp.png');
+  await captureElementScreenshot('.value-stack', 'values-desktop-cdp.png');
   await captureElementScreenshot('.focus-grid', 'focus-desktop-cdp.png');
 
   const homepageMastermindsPreview = await evaluate(`(() => {
@@ -750,6 +779,12 @@ try {
     url: siteUrl,
     requiredText: homepageRequiredText,
   });
+  await captureElementScreenshot(
+    '.hero-visual',
+    'hero-visual-mobile-cdp.png',
+  );
+  await captureElementScreenshot('.about-layout', 'about-mobile-cdp.png');
+  await captureElementScreenshot('.value-stack', 'values-mobile-cdp.png');
   await captureElementScreenshot(
     '#focus .focus-card',
     'focus-card-mobile-cdp.png',

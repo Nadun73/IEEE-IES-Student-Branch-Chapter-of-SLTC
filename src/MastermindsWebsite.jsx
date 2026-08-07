@@ -5,6 +5,7 @@ import AdvisoryPanel from './components/sections/AdvisoryPanel.jsx';
 import ExecutiveCommittee from './components/sections/ExecutiveCommittee.jsx';
 import MastermindsHero from './components/sections/MastermindsHero.jsx';
 import SubCommittee from './components/sections/SubCommittee.jsx';
+import LoadingScreen from './components/ui/LoadingScreen.jsx';
 import usePageSignals from './hooks/usePageSignals.js';
 import useRevealOnScroll from './hooks/useRevealOnScroll.js';
 
@@ -14,33 +15,37 @@ export default function MastermindsWebsite() {
   useRevealOnScroll();
 
   return (
-    <div className="site">
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
+    <>
+      <LoadingScreen />
 
-      <Header
-        activeSection={activeSection}
-        isScrolled={isScrolled}
-        scrollProgress={scrollProgress}
-      />
+      <div className="site">
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
 
-      <main id="main-content">
-        <MastermindsHero />
-        <AdvisoryPanel />
-        <ExecutiveCommittee />
-        <SubCommittee />
-      </main>
+        <Header
+          activeSection={activeSection}
+          isScrolled={isScrolled}
+          scrollProgress={scrollProgress}
+        />
 
-      <Footer topHref="#masterminds-home" />
+        <main id="main-content">
+          <MastermindsHero />
+          <AdvisoryPanel />
+          <ExecutiveCommittee />
+          <SubCommittee />
+        </main>
 
-      <a
-        className={`back-to-top ${showScrollTop ? 'is-visible' : ''}`}
-        href="#masterminds-home"
-        aria-label="Back to top"
-      >
-        <ArrowUp size={18} aria-hidden="true" />
-      </a>
-    </div>
+        <Footer topHref="#masterminds-home" />
+
+        <a
+          className={`back-to-top ${showScrollTop ? 'is-visible' : ''}`}
+          href="#masterminds-home"
+          aria-label="Back to top"
+        >
+          <ArrowUp size={18} aria-hidden="true" />
+        </a>
+      </div>
+    </>
   );
 }

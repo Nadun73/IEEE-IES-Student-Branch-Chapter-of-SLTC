@@ -1,6 +1,6 @@
 param(
     [int]$Port = 4173,
-    [int]$BrowserTimeoutSeconds = 20
+    [int]$BrowserTimeoutSeconds = 40
 )
 
 $ErrorActionPreference = 'Stop'
@@ -168,9 +168,17 @@ try {
 
     Write-Output 'VERIFICATION=PASS'
     Write-Output "URL=$siteUrl"
+    Write-Output "LOADER_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'loader-desktop-cdp.png')"
+    Write-Output "LOADER_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'loader-mobile-cdp.png')"
     Write-Output "DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'desktop-cdp.png')"
     Write-Output "MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'mobile-cdp.png')"
+    Write-Output "HERO_VISUAL_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'hero-visual-desktop-cdp.png')"
+    Write-Output "HERO_VISUAL_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'hero-visual-mobile-cdp.png')"
     Write-Output "MOBILE_MENU_SCREENSHOT=$(Join-Path $verificationRoot 'mobile-menu-cdp.png')"
+    Write-Output "ABOUT_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'about-desktop-cdp.png')"
+    Write-Output "ABOUT_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'about-mobile-cdp.png')"
+    Write-Output "VALUES_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'values-desktop-cdp.png')"
+    Write-Output "VALUES_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'values-mobile-cdp.png')"
     Write-Output "FOCUS_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'focus-desktop-cdp.png')"
     Write-Output "FOCUS_MOBILE_CARD_SCREENSHOT=$(Join-Path $verificationRoot 'focus-card-mobile-cdp.png')"
     Write-Output "MASTERMINDS_PREVIEW_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'masterminds-preview-desktop-cdp.png')"
