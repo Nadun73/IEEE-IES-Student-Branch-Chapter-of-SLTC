@@ -165,7 +165,7 @@ export default function Header({
           </nav>
 
           <a className="header-cta" href="/#connect">
-            Get involved
+            Contact us
             <ArrowRight size={16} aria-hidden="true" />
           </a>
 

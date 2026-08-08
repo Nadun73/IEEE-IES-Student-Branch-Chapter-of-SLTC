@@ -1,7 +1,19 @@
 export const navItems = [
-  { label: 'About', href: '/#about', sectionId: 'about' },
-  { label: 'Focus areas', href: '/#focus', sectionId: 'focus' },
+  {
+    label: 'About',
+    href: '/#about',
+    sectionId: 'about',
+    activeSections: [
+      'about',
+      'chapter-home',
+      'chapter-identity',
+      'chapter-purpose',
+      'chapter-focus',
+      'chapter-experience',
+    ],
+  },
   { label: 'Activities', href: '/#activities', sectionId: 'activities' },
+  { label: 'Focus areas', href: '/#focus', sectionId: 'focus' },
   {
     label: 'Masterminds',
     href: '/masterminds/',
@@ -31,8 +43,30 @@ export const navItems = [
       },
     ],
   },
-  { label: 'Connect', href: '/#connect', sectionId: 'connect' },
+  { label: 'Contact', href: '/#connect', sectionId: 'connect' },
 ];
+
+export const chapterContact = {
+  email: 'sltcieeeies@gmail.com',
+  address: 'Ingiriya Road, Meepe, Padukka, Sri Lanka',
+  links: [
+    {
+      label: 'Facebook',
+      href: 'https://www.facebook.com/SLTCIES/',
+      icon: 'facebook',
+    },
+    {
+      label: 'LinkedIn',
+      href: 'https://www.linkedin.com/company/sltcies/',
+      icon: 'linkedin',
+    },
+    {
+      label: 'IEEE IES',
+      href: 'https://www.ieee-ies.org/',
+      icon: 'external',
+    },
+  ],
+};
 
 export const focusAreas = [
   {
@@ -285,5 +319,38 @@ export const subCommitteeHeads = [
     role: 'Industry Outreach Sub-Committee Head',
     name: 'Yasas Kasthuriarachchi',
     image: null,
+  },
+];
+
+const executiveRoleCount =
+  executiveCommittee.leadership.length +
+  executiveCommittee.portfolios.reduce(
+    (total, portfolio) =>
+      total +
+      Number(Boolean(portfolio.officer)) +
+      Number(Boolean(portfolio.assistant)),
+    0,
+  );
+
+export const chapterMetrics = [
+  {
+    code: 'IES / 01',
+    value: String(focusAreas.length).padStart(2, '0'),
+    label: 'Focus areas',
+  },
+  {
+    code: 'IES / 02',
+    value: String(activityTypes.length).padStart(2, '0'),
+    label: 'Ways to engage',
+  },
+  {
+    code: 'IES / 03',
+    value: String(executiveRoleCount).padStart(2, '0'),
+    label: 'Executive roles',
+  },
+  {
+    code: 'IES / 04',
+    value: String(subCommitteeHeads.length).padStart(2, '0'),
+    label: 'Sub-committee leads',
   },
 ];

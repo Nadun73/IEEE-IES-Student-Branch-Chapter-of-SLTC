@@ -32,8 +32,8 @@ export default function About() {
               SLTC brings together students who want to explore, learn, and
               collaborate around technologies used across modern industry.
             </p>
-            <a href="#activities">
-              See how the community grows
+            <a className="about__learn-more" href="/chapter/">
+              Learn more
               <ArrowRight size={17} aria-hidden="true" />
             </a>
           </div>

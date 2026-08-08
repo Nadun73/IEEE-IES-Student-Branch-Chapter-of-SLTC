@@ -1,17 +1,12 @@
 import { ArrowUp } from 'lucide-react';
-import Header from './components/layout/Header.jsx';
 import Footer from './components/layout/Footer.jsx';
-import About from './components/sections/About.jsx';
-import Activities from './components/sections/Activities.jsx';
-import Contact from './components/sections/Contact.jsx';
-import FocusAreas from './components/sections/FocusAreas.jsx';
-import Hero from './components/sections/Hero.jsx';
-import MastermindsHero from './components/sections/MastermindsHero.jsx';
+import Header from './components/layout/Header.jsx';
+import ChapterOverview from './components/sections/ChapterOverview.jsx';
 import LoadingScreen from './components/ui/LoadingScreen.jsx';
 import usePageSignals from './hooks/usePageSignals.js';
 import useRevealOnScroll from './hooks/useRevealOnScroll.js';
 
-export default function IESWebsite() {
+export default function ChapterWebsite() {
   const { activeSection, isScrolled, showScrollTop, scrollProgress } =
     usePageSignals();
   useRevealOnScroll();
@@ -32,19 +27,14 @@ export default function IESWebsite() {
         />
 
         <main id="main-content">
-          <Hero />
-          <About />
-          <Activities />
-          <FocusAreas />
-          <MastermindsHero embedded />
-          <Contact />
+          <ChapterOverview />
         </main>
 
-        <Footer />
+        <Footer topHref="#chapter-home" />
 
         <a
           className={`back-to-top ${showScrollTop ? 'is-visible' : ''}`}
-          href="#home"
+          href="#chapter-home"
           aria-label="Back to top"
         >
           <ArrowUp size={18} aria-hidden="true" />
