@@ -1,5 +1,5 @@
 import { ArrowRight } from 'lucide-react';
-import HeroVisual from './HeroVisual.jsx';
+import { chapterMetrics } from '../../data/siteContent.js';
 
 export default function Hero() {
   return (
@@ -7,16 +7,25 @@ export default function Hero() {
       <div className="hero-grid-pattern" aria-hidden="true" />
       <div className="hero-beam hero-beam--one" aria-hidden="true" />
       <div className="hero-beam hero-beam--two" aria-hidden="true" />
+      <div className="hero-orbit" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
 
       <div className="shell hero__inner">
         <div className="hero-copy">
           <div className="hero-eyebrow">
             <span className="status-dot" />
-            IEEE Industrial Electronics Society
+            Ideas for intelligent industry.
           </div>
           <h1>
-            Ideas for
-            <span> intelligent industry.</span>
+            <span className="hero-title__society">
+              <strong>IEEE</strong> Industrial Electronics Society
+            </span>{' '}
+            <span className="hero-title__chapter">
+              Student Branch Chapter of SLTC
+            </span>
           </h1>
           <p>
             A home for SLTC students exploring industrial electronics,
@@ -33,16 +42,18 @@ export default function Hero() {
             </a>
           </div>
 
-          <div className="hero-principles" aria-label="Chapter principles">
-            <span>Learn</span>
-            <i />
-            <span>Build</span>
-            <i />
-            <span>Connect</span>
-          </div>
+          <ul className="hero-metrics" aria-label="Chapter at a glance">
+            {chapterMetrics.map(({ code, value, label }) => (
+              <li className="hero-metric" key={code}>
+                <span className="hero-metric__code" aria-hidden="true">
+                  {code}
+                </span>
+                <strong className="hero-metric__value">{value}</strong>
+                <span className="hero-metric__label">{label}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-
-        <HeroVisual />
       </div>
 
       <a className="scroll-cue" href="#about" aria-label="Scroll to the about section">

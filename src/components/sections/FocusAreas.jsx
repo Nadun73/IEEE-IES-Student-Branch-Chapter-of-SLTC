@@ -34,12 +34,11 @@ const focusImages = {
 
 export default function FocusAreas() {
   return (
-    <section className="section section--ink focus" id="focus">
-      <div className="focus-grid-pattern" aria-hidden="true" />
+    <section className="section section--light focus" id="focus">
       <div className="shell">
         <div className="section-intro section-intro--split" data-reveal>
           <div>
-            <SectionLabel light>What we explore</SectionLabel>
+            <SectionLabel>What we explore</SectionLabel>
             <h2>
               One chapter.
               <span> Many systems.</span>

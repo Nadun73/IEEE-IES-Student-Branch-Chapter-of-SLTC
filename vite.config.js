@@ -13,7 +13,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(process.cwd(), 'index.html'),
-        masterminds: resolve(process.cwd(), 'masterminds/index.html')
+        masterminds: resolve(process.cwd(), 'masterminds/index.html'),
+        chapter: resolve(process.cwd(), 'chapter/index.html')
       }
     }
   }

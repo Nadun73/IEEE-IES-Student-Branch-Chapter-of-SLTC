@@ -78,6 +78,14 @@ try {
         throw "The Masterminds page returned HTTP $($mastermindsResponse.StatusCode)."
     }
 
+    $chapterResponse = Invoke-WebRequest `
+        -Uri "$siteUrl/chapter/" `
+        -UseBasicParsing `
+        -TimeoutSec 5
+    if ($chapterResponse.StatusCode -ne 200) {
+        throw "The chapter page returned HTTP $($chapterResponse.StatusCode)."
+    }
+
     $debugListener = [System.Net.Sockets.TcpListener]::new(
         [System.Net.IPAddress]::Loopback,
         0
@@ -172,8 +180,8 @@ try {
     Write-Output "LOADER_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'loader-mobile-cdp.png')"
     Write-Output "DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'desktop-cdp.png')"
     Write-Output "MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'mobile-cdp.png')"
-    Write-Output "HERO_VISUAL_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'hero-visual-desktop-cdp.png')"
-    Write-Output "HERO_VISUAL_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'hero-visual-mobile-cdp.png')"
+    Write-Output "HERO_COMPOSITION_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'hero-composition-desktop-cdp.png')"
+    Write-Output "HERO_COMPOSITION_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'hero-composition-mobile-cdp.png')"
     Write-Output "MOBILE_MENU_SCREENSHOT=$(Join-Path $verificationRoot 'mobile-menu-cdp.png')"
     Write-Output "ABOUT_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'about-desktop-cdp.png')"
     Write-Output "ABOUT_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'about-mobile-cdp.png')"
@@ -181,10 +189,25 @@ try {
     Write-Output "VALUES_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'values-mobile-cdp.png')"
     Write-Output "FOCUS_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'focus-desktop-cdp.png')"
     Write-Output "FOCUS_MOBILE_CARD_SCREENSHOT=$(Join-Path $verificationRoot 'focus-card-mobile-cdp.png')"
+    Write-Output "CONTACT_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'contact-desktop-cdp.png')"
+    Write-Output "CONTACT_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'contact-mobile-cdp.png')"
+    Write-Output "CONTACT_FORM_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'contact-form-desktop-cdp.png')"
+    Write-Output "CONTACT_FORM_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'contact-form-mobile-cdp.png')"
     Write-Output "MASTERMINDS_PREVIEW_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'masterminds-preview-desktop-cdp.png')"
     Write-Output "MASTERMINDS_PREVIEW_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'masterminds-preview-mobile-cdp.png')"
     Write-Output "MASTERMINDS_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'masterminds-desktop-cdp.png')"
     Write-Output "MASTERMINDS_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'masterminds-mobile-cdp.png')"
+    Write-Output "CHAPTER_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-desktop-cdp.png')"
+    Write-Output "CHAPTER_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-mobile-cdp.png')"
+    Write-Output "CHAPTER_LAYERS_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-layers-desktop-cdp.png')"
+    Write-Output "CHAPTER_PURPOSE_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-purpose-desktop-cdp.png')"
+    Write-Output "CHAPTER_FOCUS_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-focus-desktop-cdp.png')"
+    Write-Output "CHAPTER_EXPERIENCE_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-experience-desktop-cdp.png')"
+    Write-Output "CHAPTER_CTA_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-cta-desktop-cdp.png')"
+    Write-Output "CHAPTER_LAYERS_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-layers-mobile-cdp.png')"
+    Write-Output "CHAPTER_PURPOSE_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-purpose-mobile-cdp.png')"
+    Write-Output "CHAPTER_FOCUS_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-focus-mobile-cdp.png')"
+    Write-Output "CHAPTER_EXPERIENCE_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'chapter-experience-mobile-cdp.png')"
     Write-Output "ADVISORY_DESKTOP_SCREENSHOT=$(Join-Path $verificationRoot 'advisory-desktop-cdp.png')"
     Write-Output "ADVISORY_MOBILE_SCREENSHOT=$(Join-Path $verificationRoot 'advisory-mobile-cdp.png')"
     Write-Output "REPORT=$reportPath"
