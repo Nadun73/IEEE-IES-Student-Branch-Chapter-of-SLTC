@@ -273,8 +273,8 @@ export default function ChapterOverview() {
                 electronics, intelligence, energy, and communication meet real
                 industrial systems.
               </p>
-              <a href="/#focus">
-                Explore the full focus areas
+              <a href="/albums/">
+                See the chapter in action
                 <ArrowRight size={17} aria-hidden="true" />
               </a>
             </div>

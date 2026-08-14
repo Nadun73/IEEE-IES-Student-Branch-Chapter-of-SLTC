@@ -1,11 +1,13 @@
-import { BookOpen, CircuitBoard, Factory, Users } from 'lucide-react';
-import { activityTypes } from '../../data/siteContent.js';
+import ieeeIesDayLogo from '../../assets/events/ieee-ies-day.png';
+import siliconPulseLogo from '../../assets/events/silicon-pulse.png';
+import sriLankaArduinoChallengeLogo from '../../assets/events/sri-lanka-arduino-challenge.png';
+import { flagshipEvents } from '../../data/siteContent.js';
 import SectionLabel from '../ui/SectionLabel.jsx';
 
-const activityIcons = {
-  bookOpen: BookOpen,
-  circuitBoard: CircuitBoard,
-  users: Users,
+const eventLogos = {
+  'ieee-ies-day': ieeeIesDayLogo,
+  'silicon-pulse': siliconPulseLogo,
+  'sri-lanka-arduino-challenge': sriLankaArduinoChallengeLogo,
 };
 
 export default function Activities() {
@@ -13,64 +15,53 @@ export default function Activities() {
     <section className="section section--paper activities" id="activities">
       <div className="shell">
         <div className="activities-heading" data-reveal>
-          <SectionLabel>Chapter experience</SectionLabel>
+          <SectionLabel>Signature events</SectionLabel>
           <h2>
-            Learn it. Build it.
-            <span> Share it.</span>
+            Our
+            <span> Flagship Events.</span>
           </h2>
           <p>
-            The chapter is designed as an active learning space—one where
-            technical curiosity becomes practical confidence and shared progress.
+            Three signature programmes spanning Arduino innovation, analog
+            electronics, and the global IEEE IES community.
           </p>
         </div>
 
         <div className="activity-grid">
-          {activityTypes.map((activity, index) => {
-            const Icon = activityIcons[activity.icon];
+          {flagshipEvents.map((event, index) => {
+            const logo = eventLogos[event.logo];
             return (
               <article
-                className={`activity-card activity-card--${activity.accent}`}
+                className={`activity-card activity-card--${event.accent}`}
                 data-reveal
                 style={{ '--reveal-delay': `${index * 90}ms` }}
-                key={activity.title}
+                key={event.title}
               >
+                <img
+                  className={`activity-card__watermark activity-card__watermark--${event.logo}`}
+                  src={logo}
+                  alt=""
+                  aria-hidden="true"
+                  decoding="async"
+                />
                 <div className="activity-card__number">0{index + 1}</div>
                 <div className="activity-card__graphic" aria-hidden="true">
-                  <Icon size={42} strokeWidth={1.35} />
+                  <img
+                    className={`activity-card__logo activity-card__logo--${event.logo}`}
+                    src={logo}
+                    alt=""
+                    decoding="async"
+                  />
                   <span />
                   <span />
                 </div>
                 <div className="activity-card__content">
-                  <span>{activity.kicker}</span>
-                  <h3>{activity.title}</h3>
-                  <p>{activity.description}</p>
+                  <span>{event.kicker}</span>
+                  <h3>{event.title}</h3>
+                  <p>{event.description}</p>
                 </div>
               </article>
             );
           })}
-        </div>
-
-        <div className="programme-panel" data-reveal>
-          <div className="programme-panel__graphic" aria-hidden="true">
-            <span className="programme-orbit programme-orbit--one" />
-            <span className="programme-orbit programme-orbit--two" />
-            <Factory />
-          </div>
-          <div className="programme-panel__content">
-            <div className="programme-status">
-              <span />
-              Programme calendar in preparation
-            </div>
-            <h3>What&apos;s ahead</h3>
-            <p>
-              Talks, workshops, projects, and chapter initiatives will appear
-              here as soon as the first programme line-up is confirmed.
-            </p>
-          </div>
-          <div className="programme-panel__index" aria-hidden="true">
-            <span>NEXT</span>
-            <strong>→</strong>
-          </div>
         </div>
       </div>
     </section>

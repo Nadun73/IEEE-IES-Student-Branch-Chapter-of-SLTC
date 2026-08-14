@@ -1,18 +1,12 @@
 import { ArrowUp } from 'lucide-react';
-import Header from './components/layout/Header.jsx';
 import Footer from './components/layout/Footer.jsx';
-import About from './components/sections/About.jsx';
-import Activities from './components/sections/Activities.jsx';
-import Contact from './components/sections/Contact.jsx';
-import Hero from './components/sections/Hero.jsx';
-import MastermindsHero from './components/sections/MastermindsHero.jsx';
-import PhotoAlbumsPreview from './components/sections/PhotoAlbumsPreview.jsx';
-import VolunteerCallout from './components/sections/VolunteerCallout.jsx';
+import Header from './components/layout/Header.jsx';
+import PhotoAlbumsArchive from './components/sections/PhotoAlbumsArchive.jsx';
 import LoadingScreen from './components/ui/LoadingScreen.jsx';
 import usePageSignals from './hooks/usePageSignals.js';
 import useRevealOnScroll from './hooks/useRevealOnScroll.js';
 
-export default function IESWebsite() {
+export default function AlbumsWebsite() {
   const { activeSection, isScrolled, showScrollTop, scrollProgress } =
     usePageSignals();
   useRevealOnScroll();
@@ -33,20 +27,14 @@ export default function IESWebsite() {
         />
 
         <main id="main-content">
-          <Hero />
-          <About />
-          <Activities />
-          <VolunteerCallout />
-          <PhotoAlbumsPreview />
-          <MastermindsHero embedded />
-          <Contact />
+          <PhotoAlbumsArchive />
         </main>
 
-        <Footer />
+        <Footer topHref="#albums-home" />
 
         <a
           className={`back-to-top ${showScrollTop ? 'is-visible' : ''}`}
-          href="#home"
+          href="#albums-home"
           aria-label="Back to top"
         >
           <ArrowUp size={18} aria-hidden="true" />
@@ -55,3 +43,4 @@ export default function IESWebsite() {
     </>
   );
 }
+

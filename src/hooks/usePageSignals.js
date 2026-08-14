@@ -25,6 +25,38 @@ export default function usePageSignals() {
   }, []);
 
   useEffect(() => {
+    const scrollToHashTarget = () => {
+      const hash = window.location.hash.slice(1);
+      if (!hash) return;
+
+      let targetId;
+      try {
+        targetId = decodeURIComponent(hash);
+      } catch {
+        return;
+      }
+
+      const target = document.getElementById(targetId);
+      if (!target) return;
+
+      window.requestAnimationFrame(() => {
+        target.scrollIntoView({ block: 'start' });
+      });
+    };
+
+    window.addEventListener('hashchange', scrollToHashTarget);
+    window.addEventListener('site:ready', scrollToHashTarget);
+    if (!document.body.classList.contains('is-loading')) {
+      scrollToHashTarget();
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', scrollToHashTarget);
+      window.removeEventListener('site:ready', scrollToHashTarget);
+    };
+  }, []);
+
+  useEffect(() => {
     const sections = Array.from(document.querySelectorAll('main section[id]'));
     const observer = new IntersectionObserver(
       (entries) => {
