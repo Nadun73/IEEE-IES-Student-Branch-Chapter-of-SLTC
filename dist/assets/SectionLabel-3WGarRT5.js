@@ -1,0 +1,1 @@
+import{j as e,S as i}from"./index-C2MzHVWK.js";function l({children:s,light:a=!1}){return e.jsxs("span",{className:`section-label ${a?"section-label--light":""}`,children:[e.jsx(i,{size:14,"aria-hidden":"true"}),s]})}export{l as S};

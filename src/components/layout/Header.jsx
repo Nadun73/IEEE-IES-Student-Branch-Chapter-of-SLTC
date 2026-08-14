@@ -3,6 +3,8 @@ import { ArrowRight, ChevronDown, Menu, X } from 'lucide-react';
 import iesLogoWhite from '../../assets/ies-logo-white-web.png';
 import { navItems } from '../../data/siteContent.js';
 
+const DESKTOP_HEADER_BREAKPOINT = 1080;
+
 export default function Header({
   activeSection,
   isScrolled,
@@ -17,7 +19,8 @@ export default function Header({
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         const shouldRestoreDesktopFocus =
-          desktopDropdownOpen && window.innerWidth > 860;
+          desktopDropdownOpen &&
+          window.innerWidth > DESKTOP_HEADER_BREAKPOINT;
         setMenuOpen(false);
         setDesktopDropdownOpen(false);
         setMobileSubmenuOpen(false);
@@ -28,7 +31,7 @@ export default function Header({
     };
 
     const handleResize = () => {
-      if (window.innerWidth > 860) {
+      if (window.innerWidth > DESKTOP_HEADER_BREAKPOINT) {
         setMenuOpen(false);
         setMobileSubmenuOpen(false);
       } else {

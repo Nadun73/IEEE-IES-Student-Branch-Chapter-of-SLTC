@@ -12,8 +12,24 @@ export const navItems = [
       'chapter-experience',
     ],
   },
-  { label: 'Activities', href: '/#activities', sectionId: 'activities' },
-  { label: 'Focus areas', href: '/#focus', sectionId: 'focus' },
+  {
+    label: 'Flagship events',
+    href: '/#activities',
+    sectionId: 'activities',
+    activeSections: ['activities'],
+  },
+  {
+    label: 'Become a Volunteer',
+    href: '/#volunteer',
+    sectionId: 'volunteer',
+    activeSections: ['volunteer', 'volunteer-home'],
+  },
+  {
+    label: 'Photo albums',
+    href: '/albums/',
+    sectionId: 'albums-home',
+    activeSections: ['albums', 'albums-home'],
+  },
   {
     label: 'Masterminds',
     href: '/masterminds/',
@@ -319,6 +335,33 @@ export const subCommitteeHeads = [
     role: 'Industry Outreach Sub-Committee Head',
     name: 'Yasas Kasthuriarachchi',
     image: null,
+  },
+];
+
+export const flagshipEvents = [
+  {
+    title: 'Sri Lanka Arduino Challenge',
+    kicker: 'Innovation challenge',
+    description:
+      'A national competition where university teams create socially impactful Arduino-based solutions.',
+    logo: 'sri-lanka-arduino-challenge',
+    accent: 'blue',
+  },
+  {
+    title: 'Silicon Pulse',
+    kicker: 'Analog design',
+    description:
+      'A 24-hour challenge that turns analog electronics knowledge into hands-on design and collaboration.',
+    logo: 'silicon-pulse',
+    accent: 'orange',
+  },
+  {
+    title: 'IEEE IES Day',
+    kicker: 'IES community',
+    description:
+      'A chapter celebration that brings the IEEE IES community together through ideas and innovation.',
+    logo: 'ieee-ies-day',
+    accent: 'navy',
   },
 ];
 

@@ -20,9 +20,9 @@ let commandId = 0;
 let socket;
 
 const hardTimeout = setTimeout(() => {
-  console.error('CDP browser verification exceeded 35 seconds.');
+  console.error('CDP browser verification exceeded 110 seconds.');
   process.exit(2);
-}, 35_000);
+}, 110_000);
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -93,7 +93,7 @@ function waitForEvent(method, timeoutMilliseconds = 7_000) {
   });
 }
 
-function send(method, params = {}, timeoutMilliseconds = 5_000) {
+function send(method, params = {}, timeoutMilliseconds = 15_000) {
   commandId += 1;
   const id = commandId;
 
@@ -198,6 +198,224 @@ async function captureElementScreenshot(selector, filename) {
     path.join(outputDirectory, filename),
     Buffer.from(screenshot.data, 'base64'),
   );
+}
+
+async function activatePoint({ x, y, touch = false }) {
+  if (touch) {
+    await send('Input.synthesizeTapGesture', {
+      x,
+      y,
+      duration: 80,
+      gestureSourceType: 'touch',
+    });
+    return;
+  }
+
+  await send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+  });
+}
+
+async function pressKey(key, code, windowsVirtualKeyCode) {
+  await send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key,
+    code,
+    windowsVirtualKeyCode,
+  });
+  await send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key,
+    code,
+    windowsVirtualKeyCode,
+  });
+}
+
+async function inspectVolunteerPicker({ filename, touch }) {
+  await evaluate(`document
+    .querySelector('.volunteer-form select[name="preferredEvent"]')
+    ?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })`);
+  await sleep(100);
+  const trigger = await evaluate(`(() => {
+    const select = document.querySelector(
+      '.volunteer-form select[name="preferredEvent"]'
+    );
+    if (!select) return null;
+    const bounds = select.getBoundingClientRect();
+    return {
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    };
+  })()`);
+
+  if (!trigger) {
+    return { exists: false };
+  }
+
+  await activatePoint({ ...trigger, touch });
+  await sleep(180);
+  const openedFromInput = await evaluate(`document
+    .querySelector('.volunteer-form select[name="preferredEvent"]')
+    ?.matches(':open') ?? false`);
+  if (!openedFromInput) {
+    await send('Runtime.evaluate', {
+      expression: `document
+        .querySelector('.volunteer-form select[name="preferredEvent"]')
+        ?.showPicker()`,
+      userGesture: true,
+      returnByValue: true,
+    });
+    await sleep(120);
+  }
+
+  const openState = await evaluate(`(() => {
+    const select = document.querySelector(
+      '.volunteer-form select[name="preferredEvent"]'
+    );
+    const pickerStyle = getComputedStyle(select, '::picker(select)');
+    const selectBounds = select.getBoundingClientRect();
+    const options = [...select.options].map((option) => {
+      const style = getComputedStyle(option);
+      const bounds = option.getBoundingClientRect();
+      return {
+        value: option.value,
+        label: option.textContent.trim(),
+        disabled: option.disabled,
+        color: style.color,
+        backgroundColor: style.backgroundColor,
+        minHeight: Number.parseFloat(style.minHeight),
+        height: bounds.height,
+        left: bounds.left,
+        right: bounds.right,
+        top: bounds.top,
+        bottom: bounds.bottom,
+      };
+    });
+    return {
+      exists: Boolean(select),
+      supported: CSS.supports('appearance: base-select'),
+      open: select.matches(':open'),
+      appearance: getComputedStyle(select).appearance,
+      pickerAppearance: pickerStyle.appearance,
+      pickerBackgroundColor: pickerStyle.backgroundColor,
+      pickerBackgroundImage: pickerStyle.backgroundImage,
+      pickerBoxShadow: pickerStyle.boxShadow,
+      pickerBorderRadius: Number.parseFloat(pickerStyle.borderRadius),
+      pickerBorderColor: pickerStyle.borderColor,
+      selectBounds: {
+        left: selectBounds.left,
+        right: selectBounds.right,
+        width: selectBounds.width,
+      },
+      options,
+      optionPanelAligned: (() => {
+        const visibleOptions = options.filter((option) => option.height > 0);
+        if (!visibleOptions.length) return false;
+        const left = Math.min(...visibleOptions.map((option) => option.left));
+        const right = Math.max(...visibleOptions.map((option) => option.right));
+        const optionPanelCenter = (left + right) / 2;
+        const selectCenter = (selectBounds.left + selectBounds.right) / 2;
+        return (
+          Math.abs(optionPanelCenter - selectCenter) <= 2 &&
+          Math.abs(right - left + 14 - selectBounds.width) <= 3
+        );
+      })(),
+      insideViewport: options
+        .filter((option) => option.height > 0)
+        .every(
+          (option) =>
+            option.left >= -1 &&
+            option.right <= window.innerWidth + 1 &&
+            option.top >= -1 &&
+            option.bottom <= window.innerHeight + 1
+        ),
+    };
+  })()`);
+
+  await captureScreenshot(filename);
+
+  const firstOption = openState.options.find(
+    (option) => !option.disabled && option.height > 0
+  );
+  if (touch && firstOption) {
+    await activatePoint({
+      x: (firstOption.left + firstOption.right) / 2,
+      y: (firstOption.top + firstOption.bottom) / 2,
+      touch: false,
+    });
+  } else {
+    await pressKey('ArrowDown', 'ArrowDown', 40);
+    await pressKey('Enter', 'Enter', 13);
+  }
+  await sleep(120);
+
+  const selectionState = await evaluate(`(() => {
+    const select = document.querySelector(
+      '.volunteer-form select[name="preferredEvent"]'
+    );
+    return {
+      value: select?.value ?? null,
+      formDataValue: select?.form
+        ? new FormData(select.form).get('preferredEvent')
+        : null,
+      closedAfterSelection: select ? !select.matches(':open') : false,
+    };
+  })()`);
+
+  const reopenTrigger = await evaluate(`(() => {
+    const select = document.querySelector(
+      '.volunteer-form select[name="preferredEvent"]'
+    );
+    const bounds = select?.getBoundingClientRect();
+    return bounds
+      ? {
+          x: bounds.left + bounds.width / 2,
+          y: bounds.top + bounds.height / 2,
+        }
+      : null;
+  })()`);
+  if (reopenTrigger) {
+    await activatePoint({ ...reopenTrigger, touch });
+    await sleep(80);
+    const reopenedFromInput = await evaluate(`document
+      .querySelector('.volunteer-form select[name="preferredEvent"]')
+      ?.matches(':open') ?? false`);
+    if (!reopenedFromInput) {
+      await send('Runtime.evaluate', {
+        expression: `document
+          .querySelector('.volunteer-form select[name="preferredEvent"]')
+          ?.showPicker()`,
+        userGesture: true,
+        returnByValue: true,
+      });
+      await sleep(80);
+    }
+    await pressKey('Escape', 'Escape', 27);
+    await sleep(80);
+  }
+
+  const escapeState = await evaluate(`(() => {
+    const select = document.querySelector(
+      '.volunteer-form select[name="preferredEvent"]'
+    );
+    return {
+      closed: select ? !select.matches(':open') : false,
+      focusReturned: document.activeElement === select,
+    };
+  })()`);
+
+  return { ...openState, ...selectionState, ...escapeState };
 }
 
 async function inspectAdvisoryCards() {
@@ -377,6 +595,22 @@ async function inspectViewport({
   await sleep(320);
   await captureScreenshot(`loader-${filename}`);
   await waitForSiteReady();
+  await evaluate(`(() => {
+    const images = [...document.images];
+    images.forEach((image) => {
+      image.loading = 'eager';
+    });
+    return Promise.race([
+      Promise.all(
+        images.map((image) =>
+          typeof image.decode === 'function'
+            ? image.decode().catch(() => undefined)
+            : Promise.resolve(),
+        ),
+      ),
+      new Promise((resolve) => window.setTimeout(resolve, 10_000)),
+    ]);
+  })()`);
   await sleep(120);
 
   const state = await evaluate(`(() => {
@@ -385,7 +619,27 @@ async function inspectViewport({
     const normalizedBodyText = bodyText.replace(/\\s+/g, ' ').toLowerCase();
     const menuToggle = document.querySelector('.menu-toggle');
     const desktopNavigation = document.querySelector('.desktop-navigation');
+    const mobileNavigation = document.querySelector('.mobile-navigation nav');
     const toggleRect = menuToggle?.getBoundingClientRect();
+    const readTopLevelNavigation = (navigation) =>
+      navigation
+        ? [...navigation.children].map((item) => {
+            const control = item.matches('a, button')
+              ? item
+              : item.querySelector(':scope > a, :scope > button');
+            const rawLabel =
+              control?.textContent.replace(/\\s+/g, ' ').trim() ?? '';
+
+            return {
+              label: rawLabel.replace(/^0\\d\\s*/, ''),
+              ordinal:
+                control?.querySelector(':scope > span')?.textContent.trim() ?? null,
+              href: control?.getAttribute('href') ?? null,
+              active: control?.classList.contains('is-active') ?? false,
+              ariaCurrent: control?.getAttribute('aria-current') ?? null,
+            };
+          })
+        : [];
     const images = [...document.images].map((image) => ({
       alt: image.alt,
       complete: image.complete,
@@ -415,6 +669,148 @@ async function inspectViewport({
     const focusCard = focusSection?.querySelector('.focus-card');
     const focusDescription = focusCard?.querySelector('p');
     const systemsFlow = focusSection?.querySelector('.systems-flow');
+    const homepageVolunteerSection = document.querySelector(
+      'main > #volunteer.volunteer-callout'
+    );
+    const volunteerPanel = homepageVolunteerSection?.querySelector(
+      '.programme-panel'
+    );
+    const volunteerHeading = homepageVolunteerSection?.querySelector('h2');
+    const activitiesSection = document.querySelector('#activities.activities');
+    const activitiesDecorationStyles = activitiesSection
+      ? getComputedStyle(activitiesSection, '::after')
+      : null;
+    const volunteerSectionRect = homepageVolunteerSection?.getBoundingClientRect();
+    const volunteerPanelRect = volunteerPanel?.getBoundingClientRect();
+    const volunteerSectionStyles = homepageVolunteerSection
+      ? getComputedStyle(homepageVolunteerSection)
+      : null;
+    const volunteerPanelStyles = volunteerPanel
+      ? getComputedStyle(volunteerPanel)
+      : null;
+    const volunteerCta = volunteerPanel
+      ? {
+          tag: volunteerPanel.tagName.toLowerCase(),
+          href: volunteerPanel.getAttribute('href'),
+          label: volunteerPanel.getAttribute('aria-label'),
+          sectionCount: document.querySelectorAll('main > #volunteer').length,
+          sectionLabelledBy:
+            homepageVolunteerSection?.getAttribute('aria-labelledby'),
+          headingId: volunteerHeading?.id ?? null,
+          headingText:
+            volunteerHeading?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+          insideActivities: Boolean(
+            document.querySelector('#activities .programme-panel')
+          ),
+          nestedInteractiveCount: volunteerPanel.querySelectorAll(
+            'a, button, input, select, textarea'
+          ).length,
+          hasWatermark: Boolean(
+            volunteerPanel.querySelector('.programme-panel__watermark')
+          ),
+          hasGraphic: Boolean(
+            volunteerPanel.querySelector('.programme-panel__graphic')
+          ),
+          orbitCount: volunteerPanel.querySelectorAll('.programme-orbit').length,
+          hasStatus: Boolean(volunteerPanel.querySelector('.programme-status')),
+          hasIndex: Boolean(
+            volunteerPanel.querySelector('.programme-panel__index')
+          ),
+          sectionInsideViewport:
+            volunteerSectionRect.left >= -1 &&
+            volunteerSectionRect.right <= window.innerWidth + 1,
+          panelInsideViewport:
+            volunteerPanelRect.left >= -1 &&
+            volunteerPanelRect.right <= window.innerWidth + 1,
+          panelHeight: volunteerPanelRect.height,
+          sectionPaperClass:
+            homepageVolunteerSection.classList.contains('section--paper'),
+          sectionPaddingTop: Number.parseFloat(
+            volunteerSectionStyles.paddingTop
+          ),
+          sectionBackgroundImage: volunteerSectionStyles.backgroundImage,
+          transitionDecorationBackgroundImage:
+            activitiesDecorationStyles?.backgroundImage ?? 'none',
+          transitionDecorationWidth: Number.parseFloat(
+            activitiesDecorationStyles?.width ?? '0'
+          ),
+          transitionDecorationHeight: Number.parseFloat(
+            activitiesDecorationStyles?.height ?? '0'
+          ),
+          transitionDecorationPointerEvents:
+            activitiesDecorationStyles?.pointerEvents ?? null,
+          panelBackgroundColor: volunteerPanelStyles.backgroundColor,
+          beforeBackgroundImage: getComputedStyle(
+            volunteerPanel,
+            '::before'
+          ).backgroundImage,
+          afterBackgroundImage: getComputedStyle(
+            volunteerPanel,
+            '::after'
+          ).backgroundImage,
+        }
+      : null;
+    const photoAlbumSection = document.querySelector(
+      '.photo-albums, .photo-albums-archive'
+    );
+    const photoAlbumCards = photoAlbumSection
+      ? [...photoAlbumSection.querySelectorAll('.photo-album-card')]
+      : [];
+    const photoAlbumRects = photoAlbumCards.map((card) =>
+      card.getBoundingClientRect()
+    );
+    const photoAlbumLayout = photoAlbumSection
+      ? {
+          id: photoAlbumSection.id,
+          preview: photoAlbumSection.classList.contains('photo-albums'),
+          heading:
+            photoAlbumSection
+              .querySelector('h2')
+              ?.textContent.replace(/\\s+/g, ' ')
+              .trim() ?? null,
+          viewAllHref:
+            photoAlbumSection
+              .querySelector('a[href="/albums/"]')
+              ?.getAttribute('href') ?? null,
+          backHref:
+            document
+              .querySelector('.photo-albums-hero__back')
+              ?.getAttribute('href') ?? null,
+          cardCount: photoAlbumCards.length,
+          firstRowCount: photoAlbumRects.filter(
+            (rect) =>
+              Math.abs(rect.top - (photoAlbumRects[0]?.top ?? rect.top)) < 3
+          ).length,
+          cardsInsideViewport: photoAlbumRects.every(
+            (rect) => rect.left >= -1 && rect.right <= window.innerWidth + 1
+          ),
+          nestedInteractiveCount: photoAlbumCards.reduce(
+            (total, card) =>
+              total +
+              card.querySelectorAll(
+                '.photo-album-card__link a, .photo-album-card__link button'
+              ).length,
+            0
+          ),
+          cards: photoAlbumCards.map((card) => {
+            const link = card.querySelector('.photo-album-card__link');
+            const image = card.querySelector('.photo-album-card__visual img');
+            return {
+              id: card.dataset.albumId,
+              title:
+                card.querySelector('h3')?.textContent.trim() ?? null,
+              href: link?.getAttribute('href') ?? null,
+              target: link?.getAttribute('target') ?? null,
+              rel: link?.getAttribute('rel') ?? null,
+              ariaLabel: link?.getAttribute('aria-label') ?? null,
+              imageComplete: image?.complete ?? false,
+              imageWidth: image?.naturalWidth ?? 0,
+              imageHeight: image?.naturalHeight ?? 0,
+              imageObjectFit: image ? getComputedStyle(image).objectFit : null,
+            };
+          }),
+        }
+      : null;
     const focusAppearance = focusSection
       ? {
           lightClass: focusSection.classList.contains('section--light'),
@@ -648,6 +1044,203 @@ async function inspectViewport({
             : null,
         }
       : null;
+    const volunteerSection = document.querySelector(
+      '#volunteer-home.volunteer-page'
+    );
+    const volunteerIntro = volunteerSection?.querySelector(
+      '.volunteer-page__intro'
+    );
+    const volunteerApplication = volunteerSection?.querySelector(
+      '.volunteer-application'
+    );
+    const volunteerBenefits = volunteerSection?.querySelector(
+      '.volunteer-page__benefits'
+    );
+    const volunteerSignal = volunteerSection?.querySelector(
+      '.volunteer-page__signal'
+    );
+    const volunteerForm = volunteerSection?.querySelector('.volunteer-form');
+    const volunteerIntroRect = volunteerIntro?.getBoundingClientRect();
+    const volunteerApplicationRect =
+      volunteerApplication?.getBoundingClientRect();
+    const volunteerControls = volunteerForm
+      ? [...volunteerForm.querySelectorAll('input, select, textarea')]
+      : [];
+    const volunteerInterests = volunteerForm
+      ? [...volunteerForm.querySelectorAll('input[name="interests"]')]
+      : [];
+    const volunteerPreferredEvent = volunteerForm?.querySelector(
+      'select[name="preferredEvent"]'
+    );
+    const volunteerParticipationModes = volunteerForm
+      ? [
+          ...volunteerForm.querySelectorAll(
+            'input[name="participationMode"]'
+          ),
+        ]
+      : [];
+    const volunteerInterestGroup = volunteerForm
+      ?.querySelector('input[name="interests"]')
+      ?.closest('fieldset.volunteer-form__section');
+    const volunteerSubmit = volunteerForm?.querySelector(
+      '.volunteer-form__submit'
+    );
+    const volunteerClear = volunteerForm?.querySelector(
+      '.volunteer-form__clear'
+    );
+    const volunteerStatus = volunteerForm?.querySelector(
+      '.volunteer-form__status'
+    );
+    const volunteerLayout = volunteerSection
+      ? {
+          exists: true,
+          labelledBy: volunteerSection.getAttribute('aria-labelledby'),
+          headingText:
+            volunteerSection
+              .querySelector('h1')
+              ?.textContent.replace(/\\s+/g, ' ')
+              .trim() ?? null,
+          formTitle:
+            volunteerApplication
+              ?.querySelector('h2')
+              ?.textContent.replace(/\\s+/g, ' ')
+              .trim() ?? null,
+          backHref:
+            volunteerSection
+              .querySelector('.volunteer-page__back')
+              ?.getAttribute('href') ?? null,
+          footerTopHref:
+            document
+              .querySelector('.site-footer .footer-bottom a')
+              ?.getAttribute('href') ?? null,
+          backToTopHref:
+            document.querySelector('.back-to-top')?.getAttribute('href') ?? null,
+          describedBy: volunteerForm?.getAttribute('aria-describedby') ?? null,
+          initiallyValid: volunteerForm?.checkValidity() ?? null,
+          sectionCount:
+            volunteerForm?.querySelectorAll(
+              ':scope > fieldset.volunteer-form__section'
+            ).length ?? 0,
+          controls: volunteerControls.map((field) => ({
+            tag: field.tagName.toLowerCase(),
+            name: field.getAttribute('name'),
+            type: field.getAttribute('type'),
+            required: field.required,
+            label:
+              field.labels?.[0]?.textContent.replace(/\\s+/g, ' ').trim() ??
+              null,
+          })),
+          dropdownStyles: volunteerForm
+            ? [...volunteerForm.querySelectorAll('select')].map((field) => {
+                const style = getComputedStyle(field);
+                const pickerStyle = getComputedStyle(
+                  field,
+                  '::picker(select)'
+                );
+                const enabledOption = [...field.options].find(
+                  (option) => !option.disabled
+                );
+                const optionStyle = enabledOption
+                  ? getComputedStyle(enabledOption)
+                  : null;
+                return {
+                  name: field.name,
+                  appearance: style.appearance,
+                  display: style.display,
+                  alignItems: style.alignItems,
+                  justifyContent: style.justifyContent,
+                  height: Number.parseFloat(style.height),
+                  paddingTop: Number.parseFloat(style.paddingTop),
+                  paddingBottom: Number.parseFloat(style.paddingBottom),
+                  backgroundColor: style.backgroundColor,
+                  backgroundImage: style.backgroundImage,
+                  paddingRight: Number.parseFloat(style.paddingRight),
+                  cursor: style.cursor,
+                  pickerAppearance: pickerStyle.appearance,
+                  pickerBackgroundColor: pickerStyle.backgroundColor,
+                  pickerBackgroundImage: pickerStyle.backgroundImage,
+                  pickerBoxShadow: pickerStyle.boxShadow,
+                  pickerBorderRadius: Number.parseFloat(
+                    pickerStyle.borderRadius
+                  ),
+                  optionMinHeight: optionStyle
+                    ? Number.parseFloat(optionStyle.minHeight)
+                    : null,
+                };
+              })
+            : [],
+          customizableSelectSupported: CSS.supports(
+            'appearance: base-select'
+          ),
+          unlabelledControls: volunteerControls
+            .filter((field) => !field.labels?.length)
+            .map((field) => field.getAttribute('name')),
+          interestCount: volunteerInterests.length,
+          interestValues: volunteerInterests.map((field) => field.value),
+          preferredEventOptions: volunteerPreferredEvent
+            ? [...volunteerPreferredEvent.options].map((option) => ({
+                value: option.value,
+                label: option.textContent.trim(),
+                disabled: option.disabled,
+              }))
+            : [],
+          preferredEventBeforeInterests: Boolean(
+            volunteerPreferredEvent &&
+              volunteerInterests[0] &&
+              (volunteerPreferredEvent.compareDocumentPosition(
+                volunteerInterests[0]
+              ) & Node.DOCUMENT_POSITION_FOLLOWING)
+          ),
+          interestGroupRequired:
+            volunteerInterestGroup?.getAttribute('aria-required') ?? null,
+          interestGroupLabel:
+            volunteerInterestGroup
+              ?.querySelector(':scope > legend')
+              ?.textContent.replace(/\s+/g, ' ')
+              .trim() ?? null,
+          participationCount: volunteerParticipationModes.length,
+          consentRequired:
+            volunteerForm?.querySelector('input[name="consent"]')?.required ??
+            false,
+          submitType: volunteerSubmit?.getAttribute('type') ?? null,
+          submitText:
+            volunteerSubmit?.textContent.replace(/\\s+/g, ' ').trim() ?? null,
+          clearType: volunteerClear?.getAttribute('type') ?? null,
+          clearText:
+            volunteerClear?.textContent.replace(/\\s+/g, ' ').trim() ?? null,
+          actionButtonCount:
+            volunteerForm?.querySelectorAll(
+              '.volunteer-form__actions > button'
+            ).length ?? 0,
+          statusLive: volunteerStatus?.getAttribute('aria-live') ?? null,
+          formToRight:
+            volunteerIntroRect && volunteerApplicationRect
+              ? volunteerApplicationRect.left > volunteerIntroRect.right
+              : false,
+          formBelow:
+            volunteerIntroRect && volunteerApplicationRect
+              ? volunteerApplicationRect.top > volunteerIntroRect.bottom
+              : false,
+          formInsideViewport: volunteerApplicationRect
+            ? volunteerApplicationRect.left >= -1 &&
+              volunteerApplicationRect.right <= window.innerWidth + 1
+            : false,
+          effectsPresent: Boolean(
+            volunteerSection.querySelector('.volunteer-page__grid') &&
+              volunteerSection.querySelector('.volunteer-page__orbit') &&
+              volunteerSection.querySelector('.volunteer-page__watermark')
+          ),
+          benefitCount:
+            volunteerBenefits?.querySelectorAll(':scope > li').length ?? 0,
+          benefitsBeforeSignal: Boolean(
+            volunteerBenefits &&
+              volunteerSignal &&
+              (volunteerBenefits.compareDocumentPosition(volunteerSignal) &
+                Node.DOCUMENT_POSITION_FOLLOWING)
+          ),
+          signalWidth: volunteerSignal?.getBoundingClientRect().width ?? null,
+        }
+      : null;
 
     return {
       title: document.title,
@@ -673,6 +1266,8 @@ async function inspectViewport({
       desktopNavigationDisplay: desktopNavigation
         ? getComputedStyle(desktopNavigation).display
         : null,
+      desktopNavigationItems: readTopLevelNavigation(desktopNavigation),
+      mobileNavigationItems: readTopLevelNavigation(mobileNavigation),
       menuToggleRect: toggleRect
         ? {
             left: toggleRect.left,
@@ -687,11 +1282,240 @@ async function inspectViewport({
       focusAppearance,
       heroLayout,
       contactLayout,
+      photoAlbumLayout,
+      volunteerCta,
+      volunteerLayout,
     };
   })()`);
 
   await captureScreenshot(filename);
   return state;
+}
+
+async function inspectHeaderViewport({ width, height, filename }) {
+  await send('Emulation.setDeviceMetricsOverride', {
+    width,
+    height,
+    deviceScaleFactor: 1,
+    mobile: false,
+    screenWidth: width,
+    screenHeight: height,
+  });
+  await sleep(180);
+
+  const state = await evaluate(`(() => {
+    const root = document.documentElement;
+    const desktopNavigation = document.querySelector('.desktop-navigation');
+    const headerCta = document.querySelector('.header-cta');
+    const menuToggle = document.querySelector('.menu-toggle');
+    const toggleRect = menuToggle?.getBoundingClientRect();
+
+    return {
+      innerWidth: window.innerWidth,
+      scrollWidth: root.scrollWidth,
+      desktopDisplay: desktopNavigation
+        ? getComputedStyle(desktopNavigation).display
+        : null,
+      ctaDisplay: headerCta ? getComputedStyle(headerCta).display : null,
+      toggleDisplay: menuToggle ? getComputedStyle(menuToggle).display : null,
+      toggleInsideViewport: toggleRect
+        ? toggleRect.left >= 0 && toggleRect.right <= window.innerWidth
+        : false,
+    };
+  })()`);
+
+  await captureElementScreenshot('.site-header', filename);
+  return state;
+}
+
+async function inspectVolunteerJourney({ width, height, mobile }) {
+  await send('Emulation.setDeviceMetricsOverride', {
+    width,
+    height,
+    deviceScaleFactor: 1,
+    mobile,
+    screenWidth: width,
+    screenHeight: height,
+  });
+  await send('Emulation.setTouchEmulationEnabled', {
+    enabled: mobile,
+    maxTouchPoints: mobile ? 5 : 1,
+  });
+
+  const homepageLoaded = waitForEvent('Page.loadEventFired');
+  await send('Page.navigate', { url: siteUrl });
+  await homepageLoaded;
+  await waitForSiteReady();
+
+  if (mobile) {
+    const togglePoint = await evaluate(`(() => {
+      const rect = document.querySelector('.menu-toggle')?.getBoundingClientRect();
+      return rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null;
+    })()`);
+    if (!togglePoint) throw new Error('Missing mobile menu toggle for volunteer journey.');
+    await activatePoint({ ...togglePoint, touch: true });
+    await sleep(450);
+  }
+
+  const navPoint = await evaluate(`(() => {
+    const selector = ${JSON.stringify(
+      mobile
+        ? '.mobile-navigation a[href="/#volunteer"]'
+        : '.desktop-navigation a[href="/#volunteer"]',
+    )};
+    const rect = document.querySelector(selector)?.getBoundingClientRect();
+    return rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null;
+  })()`);
+  if (!navPoint) throw new Error('Missing Become a Volunteer navigation link.');
+  if (mobile) {
+    await evaluate(
+      `document.querySelector('.mobile-navigation a[href="/#volunteer"]')?.click()`,
+    );
+  } else {
+    await activatePoint({ ...navPoint, touch: false });
+  }
+
+  let arrival = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    arrival = await evaluate(`(() => {
+      const section = document.querySelector('main > #volunteer');
+      const header = document.querySelector('.site-header');
+      const sectionRect = section?.getBoundingClientRect();
+      const headerRect = header?.getBoundingClientRect();
+      const readActive = (selector) => [
+        ...document.querySelectorAll(selector),
+      ].filter((item) => item.classList.contains('is-active')).map((item) => ({
+        href: item.getAttribute('href'),
+        current: item.getAttribute('aria-current'),
+      }));
+      return {
+        pathname: location.pathname,
+        hash: location.hash,
+        sectionVisible: Boolean(
+          sectionRect &&
+          headerRect &&
+          sectionRect.top >= headerRect.bottom - 3 &&
+          sectionRect.top < innerHeight &&
+          sectionRect.bottom > headerRect.bottom
+        ),
+        desktopActive: readActive('.desktop-navigation > a'),
+        mobileActive: readActive('.mobile-navigation nav > a'),
+        menuClosed: !document.body.classList.contains('menu-open'),
+      };
+    })()`);
+    if (
+      arrival.pathname === '/' &&
+      arrival.hash === '#volunteer' &&
+      arrival.sectionVisible &&
+      arrival.menuClosed &&
+      arrival.desktopActive.length === 1 &&
+      arrival.desktopActive[0].href === '/#volunteer' &&
+      arrival.mobileActive.length === 1 &&
+      arrival.mobileActive[0].href === '/#volunteer'
+    ) break;
+    await sleep(100);
+  }
+
+  await evaluate(`document.querySelector('#volunteer')?.scrollIntoView({
+    behavior: 'instant',
+    block: 'center',
+  })`);
+  await sleep(260);
+
+  const panelPoint = await evaluate(`(() => {
+    const rect = document.querySelector('#volunteer .programme-panel')?.getBoundingClientRect();
+    if (!rect) return null;
+    const x = Math.min(innerWidth - 24, Math.max(24, rect.left + rect.width / 2));
+    const y = Math.min(innerHeight - 24, Math.max(96, rect.top + rect.height / 2));
+    return {
+      x,
+      y,
+      hitHref: document.elementFromPoint(x, y)?.closest('a')?.getAttribute('href') ?? null,
+    };
+  })()`);
+  if (!panelPoint || panelPoint.hitHref !== '/volunteer/') {
+    throw new Error('Missing volunteer application panel touch target.');
+  }
+  await activatePoint({ ...panelPoint, touch: false });
+  for (let attempt = 0; attempt < 70; attempt += 1) {
+    const applicationReady = await evaluate(`(() => ({
+      pathname: location.pathname,
+      formExists: Boolean(document.querySelector('.volunteer-form')),
+      backExists: Boolean(document.querySelector('.volunteer-page__back')),
+      loaderGone: !document.querySelector('.site-loader'),
+    }))()`);
+    if (
+      applicationReady.pathname === '/volunteer/' &&
+      applicationReady.formExists &&
+      applicationReady.backExists &&
+      applicationReady.loaderGone
+    ) break;
+    await sleep(100);
+  }
+  await waitForSiteReady();
+
+  const application = await evaluate(`(() => {
+    const active = [...document.querySelectorAll(
+      ${JSON.stringify(
+        mobile ? '.mobile-navigation nav > a' : '.desktop-navigation > a',
+      )}
+    )].filter((item) => item.classList.contains('is-active'));
+    return {
+      pathname: location.pathname,
+      formExists: Boolean(document.querySelector('.volunteer-form')),
+      activeHrefs: active.map((item) => item.getAttribute('href')),
+      backHref: document.querySelector('.volunteer-page__back')?.getAttribute('href') ?? null,
+    };
+  })()`);
+
+  const backPoint = await evaluate(`(() => {
+    const rect = document.querySelector('.volunteer-page__back')?.getBoundingClientRect();
+    return rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null;
+  })()`);
+  if (!backPoint) throw new Error('Missing volunteer overview return link.');
+  await activatePoint({ ...backPoint, touch: false });
+  for (let attempt = 0; attempt < 70; attempt += 1) {
+    const locationState = await evaluate(
+      `({
+        pathname: location.pathname,
+        hash: location.hash,
+        sectionExists: Boolean(document.querySelector('main > #volunteer')),
+        loaderGone: !document.querySelector('.site-loader'),
+      })`,
+    );
+    if (
+      locationState.pathname === '/' &&
+      locationState.hash === '#volunteer' &&
+      locationState.sectionExists &&
+      locationState.loaderGone
+    ) break;
+    await sleep(100);
+  }
+  await waitForSiteReady();
+
+  let returned = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    returned = await evaluate(`(() => {
+      const section = document.querySelector('main > #volunteer');
+      const header = document.querySelector('.site-header');
+      const sectionRect = section?.getBoundingClientRect();
+      const headerRect = header?.getBoundingClientRect();
+      return {
+        pathname: location.pathname,
+        hash: location.hash,
+        sectionVisible: Boolean(
+          sectionRect &&
+          headerRect &&
+          sectionRect.top >= headerRect.bottom - 3 &&
+          sectionRect.top < innerHeight
+        ),
+      };
+    })()`);
+    if (returned.sectionVisible) break;
+    await sleep(100);
+  }
+
+  return { arrival, application, returned };
 }
 
 try {
@@ -747,7 +1571,16 @@ try {
       message.method === 'Log.entryAdded' &&
       message.params.entry.level === 'error'
     ) {
-      logErrors.push(message.params.entry.text);
+      const entry = message.params.entry;
+      const blockedExternalFont =
+        entry.text.includes('net::ERR_NETWORK_ACCESS_DENIED') &&
+        entry.source === 'network' &&
+        (!(entry.url ?? '') ||
+          /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//.test(entry.url));
+
+      if (!blockedExternalFont) {
+        logErrors.push(entry.text);
+      }
     }
 
     const waiters = eventWaiters.get(message.method);
@@ -763,14 +1596,24 @@ try {
 
   const mastermindsUrl = `${siteUrl}/masterminds/`;
   const chapterUrl = `${siteUrl}/chapter/`;
+  const volunteerUrl = `${siteUrl}/volunteer/`;
+  const albumsUrl = `${siteUrl}/albums/`;
   const homepageRequiredText = [
     'Ideas for intelligent industry.',
     'Built for curious',
     'Our Mission',
     'Global Network',
     'Excellence',
-    'What we explore',
-    'Learn it. Build it.',
+    'Photo Albums.',
+    'Arduino Challenge 2025',
+    'IEEE Whispers',
+    "IES DAY 24'",
+    'Sri Lanka Arduino Challenge',
+    'Our Flagship Events.',
+    'Sri Lanka Arduino Challenge',
+    'Silicon Pulse',
+    'IEEE IES Day',
+    'Become a Volunteer',
     'Meet the Masterminds.',
     'Start a conversation.',
     'sltcieeeies@gmail.com',
@@ -806,6 +1649,31 @@ try {
   const chapterRequiredText = [
     'What is IEEE Industrial Electronics Society Student Branch Chapter of SLTC',
   ];
+  const volunteerRequiredText = [
+    'Become a Volunteer.',
+    'Volunteer application',
+    'About you',
+    'Academic profile',
+    'Where you can contribute',
+    'IES event you would like to support',
+    'Availability & commitment',
+    'Confirmation',
+    'Submit Form',
+    'Clear Form',
+  ];
+  const albumsRequiredText = [
+    'Photo Albums.',
+    'All photo albums.',
+    'Arduino Challenge 2025',
+    'IEEE Whispers',
+    "IES DAY 24'",
+    'Sri Lanka Arduino Challenge',
+    'Challenge Sphere 2024',
+    'IEEE SPARK VI',
+    'IEEE Education Week Day 02',
+    'IEEE Education Week 2024',
+    'ELECTRSPHERE',
+  ];
 
   const desktop = await inspectViewport({
     width: 1440,
@@ -821,9 +1689,29 @@ try {
   );
   await captureElementScreenshot('.about-layout', 'about-desktop-cdp.png');
   await captureElementScreenshot('.value-stack', 'values-desktop-cdp.png');
-  await evaluate(`document.querySelector('#focus')?.scrollIntoView({ block: 'center' })`);
+  await evaluate(
+    `document.querySelector('#activities')?.scrollIntoView({ block: 'start' })`,
+  );
   await sleep(220);
-  await captureElementScreenshot('.focus-grid', 'focus-desktop-cdp.png');
+  await captureElementScreenshot(
+    '#activities .shell',
+    'flagship-events-desktop-cdp.png',
+  );
+  await evaluate(
+    `document.querySelector('#volunteer')?.scrollIntoView({ block: 'center' })`,
+  );
+  await sleep(220);
+  await captureScreenshot('activities-volunteer-transition-desktop-cdp.png');
+  await captureElementScreenshot(
+    '#volunteer',
+    'volunteer-section-desktop-cdp.png',
+  );
+  await evaluate(`document.querySelector('#albums')?.scrollIntoView({ block: 'center' })`);
+  await sleep(220);
+  await captureElementScreenshot(
+    '#albums .photo-album-grid',
+    'albums-preview-desktop-cdp.png',
+  );
   await evaluate(`document.querySelector('#connect')?.scrollIntoView({ block: 'center' })`);
   await sleep(220);
   await captureElementScreenshot(
@@ -910,6 +1798,12 @@ try {
   await captureScreenshot('desktop-masterminds-menu-cdp.png');
   await evaluate(`document.querySelector('.desktop-navigation__trigger')?.click()`);
   await sleep(100);
+
+  const compactHeader = await inspectHeaderViewport({
+    width: 1024,
+    height: 768,
+    filename: 'header-compact-cdp.png',
+  });
 
   const mastermindsDesktop = await inspectViewport({
     width: 1440,
@@ -1076,6 +1970,40 @@ try {
     'chapter-cta-desktop-cdp.png',
   );
 
+  const volunteerDesktop = await inspectViewport({
+    width: 1440,
+    height: 1000,
+    mobile: false,
+    filename: 'volunteer-desktop-cdp.png',
+    url: volunteerUrl,
+    requiredText: volunteerRequiredText,
+  });
+  await captureElementScreenshot(
+    '.volunteer-application',
+    'volunteer-form-desktop-cdp.png',
+  );
+  const volunteerPickerDesktop = await inspectVolunteerPicker({
+    filename: 'volunteer-select-open-desktop-cdp.png',
+    touch: false,
+  });
+
+  const albumsDesktop = await inspectViewport({
+    width: 1440,
+    height: 1000,
+    mobile: false,
+    filename: 'albums-desktop-cdp.png',
+    url: albumsUrl,
+    requiredText: albumsRequiredText,
+  });
+  await captureElementScreenshot(
+    '.photo-albums-hero__inner',
+    'albums-hero-desktop-cdp.png',
+  );
+  await captureElementScreenshot(
+    '.photo-albums-archive .photo-album-grid',
+    'albums-grid-desktop-cdp.png',
+  );
+
   const mobile = await inspectViewport({
     width: 390,
     height: 844,
@@ -1090,11 +2018,28 @@ try {
   );
   await captureElementScreenshot('.about-layout', 'about-mobile-cdp.png');
   await captureElementScreenshot('.value-stack', 'values-mobile-cdp.png');
-  await evaluate(`document.querySelector('#focus')?.scrollIntoView({ block: 'center' })`);
+  await evaluate(
+    `document.querySelector('#activities')?.scrollIntoView({ block: 'start' })`,
+  );
   await sleep(220);
   await captureElementScreenshot(
-    '#focus .focus-card',
-    'focus-card-mobile-cdp.png',
+    '#activities .shell',
+    'flagship-events-mobile-cdp.png',
+  );
+  await evaluate(
+    `document.querySelector('#volunteer')?.scrollIntoView({ block: 'center' })`,
+  );
+  await sleep(220);
+  await captureScreenshot('activities-volunteer-transition-mobile-cdp.png');
+  await captureElementScreenshot(
+    '#volunteer',
+    'volunteer-section-mobile-cdp.png',
+  );
+  await evaluate(`document.querySelector('#albums')?.scrollIntoView({ block: 'center' })`);
+  await sleep(220);
+  await captureElementScreenshot(
+    '#albums .photo-album-card',
+    'albums-preview-mobile-cdp.png',
   );
 
   await captureElementScreenshot(
@@ -1195,12 +2140,181 @@ try {
     'chapter-experience-mobile-cdp.png',
   );
 
+  const volunteerMobile = await inspectViewport({
+    width: 390,
+    height: 844,
+    mobile: true,
+    filename: 'volunteer-mobile-cdp.png',
+    url: volunteerUrl,
+    requiredText: volunteerRequiredText,
+  });
+  await captureElementScreenshot(
+    '.volunteer-application',
+    'volunteer-form-mobile-cdp.png',
+  );
+  const volunteerPickerMobile = await inspectVolunteerPicker({
+    filename: 'volunteer-select-open-mobile-cdp.png',
+    touch: true,
+  });
+
+  const volunteerInteractionState = await evaluate(`new Promise((resolve) => {
+    const form = document.querySelector('.volunteer-form');
+    const submitButton = document.querySelector('.volunteer-form__submit');
+    submitButton?.click();
+    window.setTimeout(() => {
+      resolve({
+        buttonExists: Boolean(submitButton),
+        formStillInvalid: form ? !form.checkValidity() : null,
+        focusedName: document.activeElement?.getAttribute('name') ?? null,
+        statusText:
+          document
+            .querySelector('.volunteer-form__status')
+            ?.textContent.replace(/\\s+/g, ' ')
+            .trim() ?? null,
+      });
+    }, 120);
+  })`);
+
+  const volunteerClearState = await evaluate(`new Promise((resolve) => {
+    const form = document.querySelector('.volunteer-form');
+    const submitButton = document.querySelector('.volunteer-form__submit');
+    const clearButton = document.querySelector('.volunteer-form__clear');
+    if (!form || !submitButton || !clearButton) {
+      resolve({
+        formExists: Boolean(form),
+        submitExists: Boolean(submitButton),
+        clearExists: Boolean(clearButton),
+      });
+      return;
+    }
+
+    const setValue = (name, value) => {
+      const field = form.elements.namedItem(name);
+      if (field && 'value' in field) field.value = value;
+    };
+    setValue('firstName', 'Verification');
+    setValue('lastName', 'Volunteer');
+    setValue('email', 'verification@example.com');
+    setValue('phone', '+94 77 123 4567');
+    setValue('institution', 'SLTC Research University');
+    setValue('programme', 'Electrical Engineering');
+    setValue('yearOfStudy', 'Year 3');
+    setValue('ieeeStatus', 'IEEE Student Member');
+    setValue('preferredEvent', 'Sri Lanka Arduino Challenge');
+    setValue('motivation', 'I want to help the chapter deliver excellent events.');
+    setValue('weeklyCommitment', '2-4 hours');
+
+    form.querySelector('input[name="consent"]').checked = true;
+    submitButton.click();
+    window.setTimeout(() => {
+      const interest = form.querySelector('input[name="interests"]');
+      const hadInterestError = Boolean(
+        document.querySelector('#volunteer-interest-error')?.textContent.trim()
+      );
+      interest.checked = true;
+      const originalConfirm = window.confirm;
+      window.confirm = () => false;
+      clearButton.focus();
+      clearButton.click();
+      window.setTimeout(() => {
+        const cancelState = {
+          firstName: form.elements.namedItem('firstName')?.value ?? null,
+          yearOfStudy: form.elements.namedItem('yearOfStudy')?.value ?? null,
+          interestChecked: interest.checked,
+          consentChecked:
+            form.querySelector('input[name="consent"]')?.checked ?? false,
+          interestErrorPreserved: Boolean(
+            document.querySelector('#volunteer-interest-error')?.textContent.trim()
+          ),
+          clearStillFocused: document.activeElement === clearButton,
+          statusText:
+            document
+              .querySelector('.volunteer-form__status')
+              ?.textContent.replace(/\\s+/g, ' ')
+              .trim() ?? null,
+        };
+
+        window.confirm = () => true;
+        clearButton.click();
+        window.setTimeout(() => {
+          window.confirm = originalConfirm;
+          const valueControls = [
+            ...form.querySelectorAll(
+              'input:not([type="checkbox"]):not([type="radio"]), select, textarea'
+            ),
+          ];
+          const checkedControls = [
+            ...form.querySelectorAll(
+              'input[type="checkbox"], input[type="radio"]'
+            ),
+          ];
+          resolve({
+            formExists: true,
+            submitExists: true,
+            clearExists: true,
+            clearType: clearButton.getAttribute('type'),
+            hadInterestError,
+            cancelState,
+            allValuesCleared: valueControls.every((field) => field.value === ''),
+            allChecksCleared: checkedControls.every((field) => !field.checked),
+            formInvalidAfterClear: !form.checkValidity(),
+            interestErrorCleared:
+              !document
+                .querySelector('#volunteer-interest-error')
+                ?.textContent.trim(),
+            interestInvalidCleared: !form.querySelector(
+              '[name="interests"][aria-invalid="true"]'
+            ),
+            focusedName: document.activeElement?.getAttribute('name') ?? null,
+            statusText:
+              document
+                .querySelector('.volunteer-form__status')
+                ?.textContent.replace(/\\s+/g, ' ')
+                .trim() ?? null,
+          });
+        }, 120);
+      }, 80);
+    }, 80);
+  })`);
+
+  const albumsMobile = await inspectViewport({
+    width: 390,
+    height: 844,
+    mobile: true,
+    filename: 'albums-mobile-cdp.png',
+    url: albumsUrl,
+    requiredText: albumsRequiredText,
+  });
+  await captureElementScreenshot(
+    '.photo-albums-hero__inner',
+    'albums-hero-mobile-cdp.png',
+  );
+  await captureElementScreenshot(
+    '.photo-albums-archive .photo-album-grid',
+    'albums-grid-mobile-cdp.png',
+  );
+
+  const volunteerJourneyDesktop = await inspectVolunteerJourney({
+    width: 1440,
+    height: 1000,
+    mobile: false,
+  });
+  const volunteerJourneyMobile = await inspectVolunteerJourney({
+    width: 390,
+    height: 844,
+    mobile: true,
+  });
+
   const failures = [];
   const expectedHomepageTitle = 'IEEE IES Student Branch Chapter of SLTC';
   const expectedMastermindsTitle =
     'Masterminds | IEEE IES Student Branch Chapter of SLTC';
   const expectedChapterTitle =
     'What is IEEE Industrial Electronics Society Student Branch Chapter of SLTC?';
+  const expectedVolunteerTitle =
+    'Become a Volunteer | IEEE IES Student Branch Chapter of SLTC';
+  const expectedAlbumsTitle =
+    'Photo Albums | IEEE IES Student Branch Chapter of SLTC';
 
   if (
     desktop.title !== expectedHomepageTitle ||
@@ -1221,12 +2335,28 @@ try {
     failures.push('The chapter explainer page title does not match its identity.');
   }
   if (
+    volunteerDesktop.title !== expectedVolunteerTitle ||
+    volunteerMobile.title !== expectedVolunteerTitle
+  ) {
+    failures.push('The volunteer page title does not match its identity.');
+  }
+  if (
+    albumsDesktop.title !== expectedAlbumsTitle ||
+    albumsMobile.title !== expectedAlbumsTitle
+  ) {
+    failures.push('The photo albums page title does not match its identity.');
+  }
+  if (
     desktop.bodyTextLength < 500 ||
     mobile.bodyTextLength < 500 ||
     mastermindsDesktop.bodyTextLength < 500 ||
     mastermindsMobile.bodyTextLength < 500 ||
     chapterDesktop.bodyTextLength < 500 ||
-    chapterMobile.bodyTextLength < 500
+    chapterMobile.bodyTextLength < 500 ||
+    volunteerDesktop.bodyTextLength < 500 ||
+    volunteerMobile.bodyTextLength < 500 ||
+    albumsDesktop.bodyTextLength < 500 ||
+    albumsMobile.bodyTextLength < 500
   ) {
     failures.push('One of the rendered pages does not contain enough content.');
   }
@@ -1236,9 +2366,384 @@ try {
     mastermindsDesktop.requiredText.some((item) => !item.present) ||
     mastermindsMobile.requiredText.some((item) => !item.present) ||
     chapterDesktop.requiredText.some((item) => !item.present) ||
-    chapterMobile.requiredText.some((item) => !item.present)
+    chapterMobile.requiredText.some((item) => !item.present) ||
+    volunteerDesktop.requiredText.some((item) => !item.present) ||
+    volunteerMobile.requiredText.some((item) => !item.present) ||
+    albumsDesktop.requiredText.some((item) => !item.present) ||
+    albumsMobile.requiredText.some((item) => !item.present)
   ) {
     failures.push('One or more expected page sections or member names are missing.');
+  }
+  if (
+    [desktop, mobile].some(
+      ({ volunteerCta }) =>
+        volunteerCta?.tag !== 'a' ||
+        volunteerCta.href !== '/volunteer/' ||
+        !volunteerCta.label?.toLowerCase().includes('become a volunteer') ||
+        volunteerCta.sectionCount !== 1 ||
+        volunteerCta.sectionLabelledBy !== volunteerCta.headingId ||
+        volunteerCta.headingText !== 'Become a Volunteer' ||
+        volunteerCta.insideActivities ||
+        volunteerCta.nestedInteractiveCount !== 0 ||
+        !volunteerCta.hasWatermark ||
+        !volunteerCta.hasGraphic ||
+        volunteerCta.orbitCount !== 2 ||
+        !volunteerCta.hasStatus ||
+        !volunteerCta.hasIndex ||
+        !volunteerCta.sectionInsideViewport ||
+        !volunteerCta.panelInsideViewport ||
+        volunteerCta.panelHeight < 44 ||
+        !volunteerCta.sectionPaperClass ||
+        volunteerCta.sectionPaddingTop !== 0 ||
+        volunteerCta.sectionBackgroundImage !== 'none' ||
+        !volunteerCta.transitionDecorationBackgroundImage?.includes('radial-gradient') ||
+        !volunteerCta.transitionDecorationBackgroundImage?.includes('linear-gradient') ||
+        volunteerCta.transitionDecorationWidth < 200 ||
+        volunteerCta.transitionDecorationHeight < 60 ||
+        volunteerCta.transitionDecorationPointerEvents !== 'none' ||
+        volunteerCta.panelBackgroundColor !== 'rgb(11, 31, 58)' ||
+        volunteerCta.beforeBackgroundImage === 'none' ||
+        volunteerCta.afterBackgroundImage === 'none',
+    )
+  ) {
+    failures.push('The volunteer panel is not linked accessibly to the volunteer page.');
+  }
+  if (
+    [volunteerJourneyDesktop, volunteerJourneyMobile].some((journey) => {
+      const expectedActive = (items) =>
+        items.length === 1 &&
+        items[0].href === '/#volunteer' &&
+        items[0].current === 'location';
+      return (
+        journey.arrival.pathname !== '/' ||
+        journey.arrival.hash !== '#volunteer' ||
+        !journey.arrival.sectionVisible ||
+        !journey.arrival.menuClosed ||
+        !expectedActive(journey.arrival.desktopActive) ||
+        !expectedActive(journey.arrival.mobileActive) ||
+        journey.application.pathname !== '/volunteer/' ||
+        !journey.application.formExists ||
+        journey.application.activeHrefs.length !== 1 ||
+        journey.application.activeHrefs[0] !== '/#volunteer' ||
+        journey.application.backHref !== '/#volunteer' ||
+        journey.returned.pathname !== '/' ||
+        journey.returned.hash !== '#volunteer' ||
+        !journey.returned.sectionVisible
+      );
+    })
+  ) {
+    failures.push(
+      'The navigation-to-section, application-page, or volunteer return journey is broken.',
+    );
+  }
+  const expectedVolunteerFields = [
+    {
+      tag: 'input',
+      name: 'firstName',
+      type: 'text',
+      required: true,
+      label: 'First name',
+    },
+    {
+      tag: 'input',
+      name: 'lastName',
+      type: 'text',
+      required: true,
+      label: 'Last name',
+    },
+    {
+      tag: 'input',
+      name: 'email',
+      type: 'email',
+      required: true,
+      label: 'Email address',
+    },
+    {
+      tag: 'input',
+      name: 'phone',
+      type: 'tel',
+      required: true,
+      label: 'Mobile / WhatsApp',
+    },
+    {
+      tag: 'input',
+      name: 'institution',
+      type: 'text',
+      required: true,
+      label: 'Institution',
+    },
+    {
+      tag: 'input',
+      name: 'programme',
+      type: 'text',
+      required: true,
+      label: 'Programme / field of study',
+    },
+    {
+      tag: 'select',
+      name: 'yearOfStudy',
+      type: null,
+      required: true,
+      label: 'Current year / stage',
+    },
+    {
+      tag: 'select',
+      name: 'ieeeStatus',
+      type: null,
+      required: true,
+      label: 'IEEE membership status',
+    },
+    {
+      tag: 'input',
+      name: 'ieeeMemberNumber',
+      type: 'text',
+      required: false,
+      label: 'IEEE member number',
+    },
+    {
+      tag: 'select',
+      name: 'preferredEvent',
+      type: null,
+      required: true,
+      label: 'IES event you would like to support',
+    },
+    {
+      tag: 'textarea',
+      name: 'motivation',
+      type: null,
+      required: true,
+      label: 'Motivation and relevant skills',
+    },
+    {
+      tag: 'textarea',
+      name: 'experience',
+      type: null,
+      required: false,
+      label: 'Previous volunteering or project experience',
+    },
+    {
+      tag: 'input',
+      name: 'portfolio',
+      type: 'url',
+      required: false,
+      label: 'Portfolio or profile link',
+    },
+    {
+      tag: 'select',
+      name: 'weeklyCommitment',
+      type: null,
+      required: true,
+      label: 'Weekly time commitment',
+    },
+    {
+      tag: 'textarea',
+      name: 'availabilityNotes',
+      type: null,
+      required: false,
+      label: 'Availability notes',
+    },
+  ];
+  const expectedVolunteerInterests = [
+    'Event planning & logistics',
+    'Technical & programme',
+    'Marketing & communications',
+    'Design, photo & video',
+    'Sponsorships & partnerships',
+    'Registration & attendee support',
+    'Web & IT',
+  ];
+  const expectedVolunteerEvents = [
+    { value: '', label: 'Select an IES event', disabled: true },
+    {
+      value: 'Sri Lanka Arduino Challenge',
+      label: 'Sri Lanka Arduino Challenge',
+      disabled: false,
+    },
+    { value: 'Silicon Pulse', label: 'Silicon Pulse', disabled: false },
+    { value: 'IEEE IES Day', label: 'IEEE IES Day', disabled: false },
+    {
+      value: 'IES Industry Visit',
+      label: 'IES Industry Visit',
+      disabled: false,
+    },
+    {
+      value: 'Engineering Beyond GPA',
+      label: 'Engineering Beyond GPA',
+      disabled: false,
+    },
+  ];
+  if (
+    [volunteerDesktop, volunteerMobile].some((state, stateIndex) => {
+      const volunteer = state.volunteerLayout;
+
+      return (
+        !volunteer ||
+        volunteer.labelledBy !== 'volunteer-title' ||
+        volunteer.headingText !== 'Become a Volunteer.' ||
+        volunteer.formTitle !== 'Volunteer application' ||
+        volunteer.backHref !== '/#volunteer' ||
+        volunteer.footerTopHref !== '#volunteer-home' ||
+        volunteer.backToTopHref !== '#volunteer-home' ||
+        volunteer.describedBy !== 'volunteer-form-description' ||
+        volunteer.initiallyValid !== false ||
+        volunteer.sectionCount !== 5 ||
+        volunteer.unlabelledControls.length !== 0 ||
+        !expectedVolunteerFields.every((field) =>
+          volunteer.controls.some(
+            (renderedField) =>
+              renderedField.tag === field.tag &&
+              renderedField.name === field.name &&
+              renderedField.type === field.type &&
+              renderedField.required === field.required &&
+              renderedField.label?.includes(field.label),
+          ),
+        ) ||
+        volunteer.dropdownStyles.length !== 4 ||
+        volunteer.dropdownStyles.some(
+          (dropdown) => {
+            if (dropdown.cursor !== 'pointer') return true;
+
+            if (volunteer.customizableSelectSupported) {
+              return (
+                dropdown.appearance !== 'base-select' ||
+                dropdown.display !== 'flex' ||
+                dropdown.alignItems !== 'center' ||
+                dropdown.justifyContent !== 'space-between' ||
+                Math.abs(dropdown.height - 50) > 0.5 ||
+                dropdown.paddingTop !== 0 ||
+                dropdown.paddingBottom !== 0 ||
+                dropdown.backgroundColor !== 'rgb(255, 255, 255)' ||
+                dropdown.backgroundImage !== 'none' ||
+                dropdown.pickerAppearance !== 'base-select' ||
+                dropdown.pickerBackgroundColor !== 'rgb(255, 255, 255)' ||
+                !dropdown.pickerBackgroundImage.includes('linear-gradient') ||
+                !dropdown.pickerBackgroundImage.includes('radial-gradient') ||
+                dropdown.pickerBoxShadow === 'none' ||
+                dropdown.pickerBorderRadius < 14 ||
+                dropdown.optionMinHeight < 44
+              );
+            }
+
+            return (
+              dropdown.appearance !== 'none' ||
+              !dropdown.backgroundImage.includes('url(') ||
+              dropdown.paddingRight < 50
+            );
+          },
+        ) ||
+        volunteer.interestCount !== expectedVolunteerInterests.length ||
+        !expectedVolunteerInterests.every(
+          (value, index) => volunteer.interestValues[index] === value,
+        ) ||
+        volunteer.preferredEventOptions.length !==
+          expectedVolunteerEvents.length ||
+        !expectedVolunteerEvents.every((expectedOption, index) => {
+          const renderedOption = volunteer.preferredEventOptions[index];
+          return (
+            renderedOption?.value === expectedOption.value &&
+            renderedOption.label === expectedOption.label &&
+            renderedOption.disabled === expectedOption.disabled
+          );
+        }) ||
+        !volunteer.preferredEventBeforeInterests ||
+        !volunteer.interestGroupLabel?.toLowerCase().includes('required') ||
+        volunteer.participationCount !== 0 ||
+        !volunteer.consentRequired ||
+        volunteer.submitType !== 'submit' ||
+        volunteer.submitText !== 'Submit Form' ||
+        volunteer.clearType !== 'reset' ||
+        volunteer.clearText !== 'Clear Form' ||
+        volunteer.actionButtonCount !== 2 ||
+        volunteer.statusLive !== 'polite' ||
+        (stateIndex === 0 ? !volunteer.formToRight : !volunteer.formBelow) ||
+        !volunteer.formInsideViewport ||
+        !volunteer.effectsPresent ||
+        volunteer.benefitCount !== 3 ||
+        !volunteer.benefitsBeforeSignal ||
+        volunteer.signalWidth < 100 ||
+        volunteer.signalWidth > 130
+      );
+    })
+  ) {
+    failures.push(
+      'The responsive volunteer application page or accessible form is incomplete.',
+    );
+  }
+  const allowedVolunteerEventValues = expectedVolunteerEvents
+    .map((option) => option.value)
+    .filter(Boolean);
+  if (
+    [volunteerPickerDesktop, volunteerPickerMobile].some(
+      (picker) =>
+        !picker.exists ||
+        !picker.supported ||
+        !picker.open ||
+        picker.appearance !== 'base-select' ||
+        picker.pickerAppearance !== 'base-select' ||
+        picker.pickerBackgroundColor !== 'rgb(255, 255, 255)' ||
+        !picker.pickerBackgroundImage.includes('linear-gradient') ||
+        !picker.pickerBackgroundImage.includes('radial-gradient') ||
+        picker.pickerBoxShadow === 'none' ||
+        picker.pickerBorderRadius < 14 ||
+        !picker.optionPanelAligned ||
+        picker.options.length !== expectedVolunteerEvents.length ||
+        !expectedVolunteerEvents.every((expectedOption, index) => {
+          const renderedOption = picker.options[index];
+          return (
+            renderedOption?.value === expectedOption.value &&
+            renderedOption.label === expectedOption.label &&
+            renderedOption.disabled === expectedOption.disabled &&
+            renderedOption.minHeight >= 44
+          );
+        }) ||
+        !picker.insideViewport ||
+        !allowedVolunteerEventValues.includes(picker.value) ||
+        picker.formDataValue !== picker.value ||
+        !picker.closedAfterSelection ||
+        !picker.closed ||
+        !picker.focusReturned,
+    )
+  ) {
+    failures.push(
+      'The volunteer event picker is not fully themed, accessible, or usable with keyboard and touch input.',
+    );
+  }
+  if (
+    !volunteerInteractionState.buttonExists ||
+    !volunteerInteractionState.formStillInvalid ||
+    volunteerInteractionState.focusedName !== 'firstName' ||
+    !volunteerInteractionState.statusText
+      ?.toLowerCase()
+      .includes('complete the required fields')
+  ) {
+    failures.push(
+      'The volunteer form does not provide usable validation feedback before submission.',
+    );
+  }
+  if (
+    !volunteerClearState.formExists ||
+    !volunteerClearState.submitExists ||
+    !volunteerClearState.clearExists ||
+    volunteerClearState.clearType !== 'reset' ||
+    !volunteerClearState.hadInterestError ||
+    volunteerClearState.cancelState?.firstName !== 'Verification' ||
+    volunteerClearState.cancelState?.yearOfStudy !== 'Year 3' ||
+    !volunteerClearState.cancelState?.interestChecked ||
+    !volunteerClearState.cancelState?.consentChecked ||
+    !volunteerClearState.cancelState?.interestErrorPreserved ||
+    !volunteerClearState.cancelState?.clearStillFocused ||
+    volunteerClearState.cancelState?.statusText !== 'Form clearing cancelled.' ||
+    !volunteerClearState.allValuesCleared ||
+    !volunteerClearState.allChecksCleared ||
+    !volunteerClearState.formInvalidAfterClear ||
+    !volunteerClearState.interestErrorCleared ||
+    !volunteerClearState.interestInvalidCleared ||
+    volunteerClearState.focusedName !== 'firstName' ||
+    volunteerClearState.statusText !== 'Form cleared.'
+  ) {
+    failures.push(
+      'The Clear Form action does not safely preserve or fully reset values, validation state, and focus.',
+    );
   }
   const expectedContactFields = [
     { tag: 'input', name: 'firstName', type: 'text', label: 'First name' },
@@ -1347,7 +2852,7 @@ try {
           (label, index) => hero.metricLabels[index] === label,
         ) ||
         !hero.actionHrefs.includes('#about') ||
-        !hero.actionHrefs.includes('#focus') ||
+        !hero.actionHrefs.includes('#albums') ||
         !hero.orbitPresent ||
         hero.legacyVisualPresent
       );
@@ -1361,7 +2866,11 @@ try {
     mastermindsDesktop.hasErrorOverlay ||
     mastermindsMobile.hasErrorOverlay ||
     chapterDesktop.hasErrorOverlay ||
-    chapterMobile.hasErrorOverlay
+    chapterMobile.hasErrorOverlay ||
+    volunteerDesktop.hasErrorOverlay ||
+    volunteerMobile.hasErrorOverlay ||
+    albumsDesktop.hasErrorOverlay ||
+    albumsMobile.hasErrorOverlay
   ) {
     failures.push('A framework error overlay is visible.');
   }
@@ -1369,9 +2878,13 @@ try {
     desktop.innerWidth !== 1440 ||
     mastermindsDesktop.innerWidth !== 1440 ||
     chapterDesktop.innerWidth !== 1440 ||
+    volunteerDesktop.innerWidth !== 1440 ||
+    albumsDesktop.innerWidth !== 1440 ||
     mobile.innerWidth !== 390 ||
     mastermindsMobile.innerWidth !== 390 ||
-    chapterMobile.innerWidth !== 390
+    chapterMobile.innerWidth !== 390 ||
+    volunteerMobile.innerWidth !== 390 ||
+    albumsMobile.innerWidth !== 390
   ) {
     failures.push(
       'Viewport emulation does not match the requested desktop/mobile sizes.',
@@ -1383,7 +2896,11 @@ try {
     mastermindsDesktop.scrollWidth > mastermindsDesktop.innerWidth + 1 ||
     mastermindsMobile.scrollWidth > mastermindsMobile.innerWidth + 1 ||
     chapterDesktop.scrollWidth > chapterDesktop.innerWidth + 1 ||
-    chapterMobile.scrollWidth > chapterMobile.innerWidth + 1
+    chapterMobile.scrollWidth > chapterMobile.innerWidth + 1 ||
+    volunteerDesktop.scrollWidth > volunteerDesktop.innerWidth + 1 ||
+    volunteerMobile.scrollWidth > volunteerMobile.innerWidth + 1 ||
+    albumsDesktop.scrollWidth > albumsDesktop.innerWidth + 1 ||
+    albumsMobile.scrollWidth > albumsMobile.innerWidth + 1
   ) {
     failures.push('Horizontal overflow was detected on one of the pages.');
   }
@@ -1393,9 +2910,15 @@ try {
     mastermindsDesktop.pathname !== '/masterminds/' ||
     mastermindsMobile.pathname !== '/masterminds/' ||
     chapterDesktop.pathname !== '/chapter/' ||
-    chapterMobile.pathname !== '/chapter/'
+    chapterMobile.pathname !== '/chapter/' ||
+    volunteerDesktop.pathname !== '/volunteer/' ||
+    volunteerMobile.pathname !== '/volunteer/' ||
+    albumsDesktop.pathname !== '/albums/' ||
+    albumsMobile.pathname !== '/albums/'
   ) {
-    failures.push('Homepage, Masterminds, or chapter page routing is incorrect.');
+    failures.push(
+      'Homepage, Masterminds, chapter, volunteer, or albums page routing is incorrect.',
+    );
   }
   if (
     Object.values(desktop.committeeSections).some(Boolean) ||
@@ -1421,6 +2944,10 @@ try {
       mastermindsMobile,
       chapterDesktop,
       chapterMobile,
+      volunteerDesktop,
+      volunteerMobile,
+      albumsDesktop,
+      albumsMobile,
     ].some((state) => state.h1Count !== 1)
   ) {
     failures.push('Each page must contain exactly one primary heading.');
@@ -1428,7 +2955,9 @@ try {
   if (
     desktop.desktopNavigationDisplay === 'none' ||
     mastermindsDesktop.desktopNavigationDisplay === 'none' ||
-    chapterDesktop.desktopNavigationDisplay === 'none'
+    chapterDesktop.desktopNavigationDisplay === 'none' ||
+    volunteerDesktop.desktopNavigationDisplay === 'none' ||
+    albumsDesktop.desktopNavigationDisplay === 'none'
   ) {
     failures.push('Desktop navigation is hidden at 1440px.');
   }
@@ -1444,7 +2973,15 @@ try {
     chapterMobile.menuToggleDisplay === 'none' ||
     !chapterMobile.menuToggleRect ||
     chapterMobile.menuToggleRect.left < 0 ||
-    chapterMobile.menuToggleRect.right > chapterMobile.innerWidth
+    chapterMobile.menuToggleRect.right > chapterMobile.innerWidth ||
+    volunteerMobile.menuToggleDisplay === 'none' ||
+    !volunteerMobile.menuToggleRect ||
+    volunteerMobile.menuToggleRect.left < 0 ||
+    volunteerMobile.menuToggleRect.right > volunteerMobile.innerWidth ||
+    albumsMobile.menuToggleDisplay === 'none' ||
+    !albumsMobile.menuToggleRect ||
+    albumsMobile.menuToggleRect.left < 0 ||
+    albumsMobile.menuToggleRect.right > albumsMobile.innerWidth
   ) {
     failures.push('The mobile menu control is not visible within the viewport.');
   }
@@ -1455,6 +2992,71 @@ try {
     !mobileMenuState.bodyLocked
   ) {
     failures.push('The mobile navigation did not open correctly.');
+  }
+  const expectedPrimaryNavigation = [
+    ['About', '/#about'],
+    ['Flagship events', '/#activities'],
+    ['Become a Volunteer', '/#volunteer'],
+    ['Photo albums', '/albums/'],
+    ['Masterminds', null],
+    ['Contact', '/#connect'],
+  ];
+  const matchesPrimaryNavigation = (items) =>
+    items.length === expectedPrimaryNavigation.length &&
+    expectedPrimaryNavigation.every(
+      ([label, href], index) =>
+        items[index]?.label === label && items[index]?.href === href,
+    );
+  if (
+    !matchesPrimaryNavigation(desktop.desktopNavigationItems) ||
+    !matchesPrimaryNavigation(mobile.mobileNavigationItems) ||
+    mobile.mobileNavigationItems[2]?.ordinal !== '03'
+  ) {
+    failures.push(
+      'Become a Volunteer is missing or out of order in the primary navigation.',
+    );
+  }
+  const volunteerDesktopActiveItems =
+    volunteerDesktop.desktopNavigationItems.filter((item) => item.active);
+  const volunteerMobileActiveItems =
+    volunteerMobile.mobileNavigationItems.filter((item) => item.active);
+  if (
+    volunteerDesktopActiveItems.length !== 1 ||
+    volunteerDesktopActiveItems[0]?.href !== '/#volunteer' ||
+    volunteerDesktopActiveItems[0]?.ariaCurrent !== 'location' ||
+    volunteerMobileActiveItems.length !== 1 ||
+    volunteerMobileActiveItems[0]?.href !== '/#volunteer' ||
+    volunteerMobileActiveItems[0]?.ariaCurrent !== 'location'
+  ) {
+    failures.push(
+      'The volunteer page does not uniquely activate Become a Volunteer in the navigation.',
+    );
+  }
+  const albumsDesktopActiveItems =
+    albumsDesktop.desktopNavigationItems.filter((item) => item.active);
+  const albumsMobileActiveItems =
+    albumsMobile.mobileNavigationItems.filter((item) => item.active);
+  if (
+    albumsDesktopActiveItems.length !== 1 ||
+    albumsDesktopActiveItems[0]?.href !== '/albums/' ||
+    albumsDesktopActiveItems[0]?.ariaCurrent !== 'location' ||
+    albumsMobileActiveItems.length !== 1 ||
+    albumsMobileActiveItems[0]?.href !== '/albums/' ||
+    albumsMobileActiveItems[0]?.ariaCurrent !== 'location'
+  ) {
+    failures.push(
+      'The albums page does not uniquely activate Photo albums in the navigation.',
+    );
+  }
+  if (
+    compactHeader.innerWidth !== 1024 ||
+    compactHeader.desktopDisplay !== 'none' ||
+    compactHeader.ctaDisplay !== 'none' ||
+    compactHeader.toggleDisplay === 'none' ||
+    !compactHeader.toggleInsideViewport ||
+    compactHeader.scrollWidth > compactHeader.innerWidth + 1
+  ) {
+    failures.push('The expanded navigation does not collapse safely at 1024px.');
   }
   const expectedMastermindsLabels = [
     'Advisory Panel',
@@ -1474,20 +3076,30 @@ try {
     failures.push('The homepage Learn more link does not target the chapter page.');
   }
   const activitiesSectionIndex = homepageSectionOrder.sections.indexOf('activities');
-  const focusSectionIndex = homepageSectionOrder.sections.indexOf('focus');
+  const volunteerSectionIndex = homepageSectionOrder.sections.indexOf('volunteer');
+  const albumsSectionIndex = homepageSectionOrder.sections.indexOf('albums');
   const activitiesNavigationIndex = homepageSectionOrder.navigation.indexOf(
     '/#activities',
   );
-  const focusNavigationIndex = homepageSectionOrder.navigation.indexOf('/#focus');
+  const albumsNavigationIndex = homepageSectionOrder.navigation.indexOf('/albums/');
+  const volunteerNavigationIndex = homepageSectionOrder.navigation.indexOf(
+    '/#volunteer',
+  );
   if (
     activitiesSectionIndex < 0 ||
-    focusSectionIndex < 0 ||
-    activitiesSectionIndex > focusSectionIndex ||
+    volunteerSectionIndex < 0 ||
+    albumsSectionIndex < 0 ||
+    activitiesSectionIndex > volunteerSectionIndex ||
+    volunteerSectionIndex > albumsSectionIndex ||
     activitiesNavigationIndex < 0 ||
-    focusNavigationIndex < 0 ||
-    activitiesNavigationIndex > focusNavigationIndex
+    volunteerNavigationIndex < 0 ||
+    albumsNavigationIndex < 0 ||
+    activitiesNavigationIndex > volunteerNavigationIndex ||
+    volunteerNavigationIndex > albumsNavigationIndex
   ) {
-    failures.push('Activities must appear before Focus Areas in the page and navigation.');
+    failures.push(
+      'Activities, Become a Volunteer, and Photo albums are not in the expected page and navigation order.',
+    );
   }
   if (
     !homepageMastermindsPreview.exists ||
@@ -1539,46 +3151,84 @@ try {
       ...mastermindsMobile.images,
       ...chapterDesktop.images,
       ...chapterMobile.images,
+      ...volunteerDesktop.images,
+      ...volunteerMobile.images,
+      ...albumsDesktop.images,
+      ...albumsMobile.images,
     ].some(
       (image) => !image.complete || image.naturalWidth === 0,
     )
   ) {
     failures.push('One or more logo images failed to render.');
   }
+  const expectedAlbumTitles = [
+    'Arduino Challenge 2025',
+    'IEEE Whispers',
+    "IES DAY 24'",
+    'Sri Lanka Arduino Challenge',
+    'Challenge Sphere 2024',
+    'IEEE SPARK VI',
+    'IEEE Education Week Day 02',
+    'IEEE Education Week 2024',
+    'ELECTRSPHERE',
+  ];
+  const expectedAlbumHrefs = [
+    'https://www.facebook.com/media/set/?set=a.1212222534257763&type=3',
+    'https://www.facebook.com/media/set/?set=a.1377114571101891&type=3',
+    'https://www.facebook.com/media/set/?set=a.997206695759349&type=3',
+    'https://www.facebook.com/media/set/?set=a.921151433364876&type=3',
+    'https://www.facebook.com/media/set/?set=a.876705321142821&type=3',
+    'https://www.facebook.com/media/set/?set=a.856040706542616&type=3',
+    'https://www.facebook.com/media/set/?set=a.844807354332618&type=3',
+    'https://www.facebook.com/media/set/?set=a.844721457674541&type=3',
+    'https://www.facebook.com/media/set/?set=a.754247180055303&type=3',
+  ];
+  const albumCardsAreValid = (cards, expectedCount) =>
+    cards.length === expectedCount &&
+    cards.every(
+      (card, index) =>
+        card.title === expectedAlbumTitles[index] &&
+        card.href === expectedAlbumHrefs[index] &&
+        card.target === '_blank' &&
+        card.rel?.includes('noreferrer') &&
+        card.ariaLabel?.includes(card.title) &&
+        card.ariaLabel?.toLowerCase().includes('new tab') &&
+        card.imageComplete &&
+        card.imageWidth >= 1300 &&
+        card.imageHeight >= 1300 &&
+        card.imageObjectFit === 'cover',
+    );
   if (
-    [desktop, mobile].some(
-      (state) => {
-        const focusMasksRemoved =
-          state.focusMediaMasks.length === 4 &&
-          state.focusMediaMasks.every(({ maskImage, webkitMaskImage }) =>
-            [maskImage, webkitMaskImage].every(
-              (value) => String(value ?? '').trim().toLowerCase() === 'none',
-            ),
-          );
-
-        return (
-          state.focusImages.length !== 4 ||
-          state.focusImages.some(
-            (image) =>
-              !image.complete ||
-              image.naturalWidth < 800 ||
-              image.naturalHeight < 800 ||
-              !image.alt ||
-              image.objectFit !== 'contain',
-          ) ||
-          !focusMasksRemoved ||
-          !state.focusAppearance?.lightClass ||
-          state.focusAppearance?.darkClass ||
-          state.focusAppearance?.backgroundColor !== 'rgb(255, 255, 255)' ||
-          state.focusAppearance?.color !== 'rgb(20, 45, 82)' ||
-          state.focusAppearance?.descriptionColor !== 'rgb(82, 101, 124)' ||
-          state.focusAppearance?.flowBackground !== 'rgb(246, 248, 251)'
-        );
-      },
-    )
+    [desktop, mobile].some((state, stateIndex) => {
+      const albums = state.photoAlbumLayout;
+      return (
+        !albums?.preview ||
+        albums.cardCount !== 4 ||
+        albums.firstRowCount !== (stateIndex === 0 ? 4 : 1) ||
+        albums.viewAllHref !== '/albums/' ||
+        !albums.cardsInsideViewport ||
+        albums.nestedInteractiveCount !== 0 ||
+        !albumCardsAreValid(albums.cards, 4)
+      );
+    }) ||
+    [albumsDesktop, albumsMobile].some((state, stateIndex) => {
+      const albums = state.photoAlbumLayout;
+      return (
+        !albums ||
+        albums.preview ||
+        albums.cardCount !== 9 ||
+        albums.firstRowCount !== (stateIndex === 0 ? 3 : 1) ||
+        albums.backHref !== '/#albums' ||
+        !albums.cardsInsideViewport ||
+        albums.nestedInteractiveCount !== 0 ||
+        !albumCardsAreValid(albums.cards, 9) ||
+        new Set(albums.cards.map((card) => card.id)).size !== 9 ||
+        new Set(albums.cards.map((card) => card.href)).size !== 9
+      );
+    })
   ) {
     failures.push(
-      'The simple light Focus Areas treatment or contained illustrations are incomplete.',
+      'The four-album homepage preview or nine-album Facebook archive is incomplete.',
     );
   }
   if (runtimeExceptions.length || consoleErrors.length || logErrors.length) {
@@ -1659,6 +3309,17 @@ try {
     mastermindsMobile,
     chapterDesktop,
     chapterMobile,
+    volunteerDesktop,
+    volunteerMobile,
+    albumsDesktop,
+    albumsMobile,
+    volunteerPickerDesktop,
+    volunteerPickerMobile,
+    volunteerJourneyDesktop,
+    volunteerJourneyMobile,
+    compactHeader,
+    volunteerInteractionState,
+    volunteerClearState,
     homepageChapterLink,
     homepageSectionOrder,
     homepageMastermindsPreview,
@@ -1689,6 +3350,8 @@ try {
   console.log(`MOBILE_MENU_OPEN=${mobileMenuState.open}`);
   console.log(`MASTERMINDS_PAGE=${mastermindsDesktop.pathname}`);
   console.log(`CHAPTER_PAGE=${chapterDesktop.pathname}`);
+  console.log(`VOLUNTEER_PAGE=${volunteerDesktop.pathname}`);
+  console.log(`ALBUMS_PAGE=${albumsDesktop.pathname}`);
   console.log(`HORIZONTAL_OVERFLOW=NONE`);
   console.log(`RUNTIME_EXCEPTIONS=${runtimeExceptions.length}`);
   console.log(`CONSOLE_ERRORS=${consoleErrors.length}`);

@@ -61,6 +61,7 @@ export default function LoadingScreen() {
             if (site) {
               site.inert = false;
             }
+            window.dispatchEvent(new Event('site:ready'));
           }, exitTransitionTime);
         }, readyHoldTime);
       }, remainingTime);

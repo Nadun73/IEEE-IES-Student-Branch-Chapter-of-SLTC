@@ -37,8 +37,8 @@ export default function Hero() {
               Discover the chapter
               <ArrowRight size={18} aria-hidden="true" />
             </a>
-            <a className="button button--ghost" href="#focus">
-              Explore focus areas
+            <a className="button button--ghost" href="#albums">
+              View photo albums
             </a>
           </div>
 
